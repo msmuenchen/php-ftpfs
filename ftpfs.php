@@ -21,6 +21,7 @@ class PHPFTPFS extends Fuse {
     public $cache_maxage=60;
     public $cachedir="";
     public $use_cache=false;
+    public $debug_curl=false;
     
     private $curl=NULL;
     
@@ -38,7 +39,8 @@ class PHPFTPFS extends Fuse {
             "KEY_PASV",
             "KEY_REMOTEDIR",
             "KEY_ENABLE_IPV6",
-            "KEY_CACHEDIR"
+            "KEY_CACHEDIR",
+            "KEY_DEBUG_CURL"
         ));
         $this->opts     = array(
             "--help" => $this->opt_keys["KEY_HELP"],
@@ -55,7 +57,8 @@ class PHPFTPFS extends Fuse {
             "pasv" => $this->opt_keys["KEY_PASV"],
             "remotedir " => $this->opt_keys["KEY_REMOTEDIR"],
             "ipv6" => $this->opt_keys["KEY_ENABLE_IPV6"],
-            "cachedir " => $this->opt_keys["KEY_CACHEDIR"]
+            "cachedir " => $this->opt_keys["KEY_CACHEDIR"],
+            "debug_curl" => $this->opt_keys["KEY_DEBUG_CURL"]
         );
         $this->userdata = array();
     }
@@ -127,7 +130,7 @@ class PHPFTPFS extends Fuse {
         
         //Open (and test) cURL connection
         $this->curl=curl_init($base_url);
-        if($this->debug) {
+        if($this->debug_curl) {
             $ret=curl_setopt($this->curl,CURLOPT_VERBOSE,true);
             if($ret===FALSE)
                 trigger_error(sprintf("cURL error: '%s'",curl_error($this->curl)),E_USER_ERROR);
@@ -182,6 +185,7 @@ Options specific to %1\$s:
     -o cachedir=s             directory for file cache, will be set readable only
                               to the user calling the script. Can be shared by multiple
                               %1\$s instances. If not specified, caching is disabled.
+    -o debug_curl             set CURLOPT_VERBOSE
 
 ", $this->name, $argv[0]);
                 return 0;
@@ -191,9 +195,12 @@ Options specific to %1\$s:
                 return 1;
                 break;
             case $this->opt_keys["KEY_DEBUG"]:
-                printf("debug mode enabled\n");
                 $this->debug=true;
                 return 1;
+                break;
+            case $this->opt_keys["KEY_DEBUG_CURL"]:
+                $this->debug_curl=true;
+                return 0;
                 break;
             case $this->opt_keys["KEY_USER"]:
                 $this->user=substr($arg,5);
