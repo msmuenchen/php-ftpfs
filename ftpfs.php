@@ -307,6 +307,7 @@ Options specific to %1\$s:
     //      and so will see the "220 Ok login now" message as start message for the parsing. So, we hope
     //      that cURL doesn't run SYST on connects in the future and use its unique 215 to establish a clean
     //      state.
+    // See also: RFC 3659 @ http://www.ietf.org/rfc/rfc3659.txt
     public function curl_mlst($path) {
         //we'll prepend the path with remotedir, which already has a slash
         if(substr($path,0,1)=="/")
@@ -489,10 +490,15 @@ Options specific to %1\$s:
         $st['blocks']  = 0;
         
         //TODO: Check allow_other for the permissions
+        // See http://www.perlfect.com/articles/chmod.shtml for an explanation of Unix modes
         if($data["type"]=="file") {
             $st['mode']|=FUSE_S_IFREG;
             $st['nlink']=1;
             $st['size']=$data["size"];
+            if(isset($data["perm"]["r"]))
+                $st['mode']|=0444;
+            if(isset($data["perm"]["w"]))
+                $st['mode']|=0222;
         }
         if($data["type"]=="dir") {
             $st['mode']|=FUSE_S_IFDIR;
