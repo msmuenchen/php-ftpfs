@@ -477,6 +477,7 @@ Options specific to %1\$s:
         $st['ino']     = 0;
         $st['mode']    = 0;
         $st['nlink']   = 0;
+        //TODO: assign effective uid/gid...
         $st['uid']     = 0;
         $st['gid']     = 0;
         $st['rdev']    = 0;
@@ -487,13 +488,22 @@ Options specific to %1\$s:
         $st['blksize'] = 0;
         $st['blocks']  = 0;
         
+        //TODO: Check allow_other for the permissions
         if($data["type"]=="file") {
             $st['mode']|=FUSE_S_IFREG;
             $st['nlink']=1;
+            $st['size']=$data["size"];
         }
         if($data["type"]=="dir") {
             $st['mode']|=FUSE_S_IFDIR;
+            if(isset($data["perm"]["e"])) //e in directories=cd works, which is mode +x
+                $st['mode']|=0111;
+            if(isset($data["perm"]["l"])) //l in directories=ls works, which is mode +r
+                $st['mode']|=0444;
+            if(isset($data["perm"]["p"])) //p in directories=can delete files, which is mode +w
+                $st['mode']|=0222;
             $st['nlink']=1;
+            printf("dir %s, modes %s\n",$path,compact_pa($data["perm"]));
         }
         
         if($this->debug)
