@@ -26,6 +26,8 @@ class PHPFTPFS extends Fuse {
     public $debug_raw=false;
     
     private $curl=NULL;
+    private $handles=array(); //keep track of the handles returned by open() here
+    private $next_handle_id=1; //do not let phpftpfs run too long, this can overflow!
     
     public function __construct() {
         $this->opt_keys = array_flip(array(
@@ -322,8 +324,8 @@ Options specific to %1\$s:
             CURLOPT_QUOTE=>array("SYST","MLST $abspath"),//"CWD $abspath","MLST"),
             CURLOPT_NOBODY=>true,
             CURLOPT_CUSTOMREQUEST=>"",
-            CURLOPT_HEADERFUNCTION=>array($this,"curl_mlst_cb")
-            
+            CURLOPT_HEADERFUNCTION=>array($this,"curl_mlst_cb"),
+            CURLOPT_RANGE=>""
         ));
         if($ret===FALSE)
             trigger_error(sprintf("cURL error: '%s'",curl_error($this->curl)),E_USER_ERROR);
@@ -402,7 +404,8 @@ Options specific to %1\$s:
             CURLOPT_QUOTE=>array(),
             CURLOPT_NOBODY=>false,
             CURLOPT_CUSTOMREQUEST=>"MLSD",
-            CURLOPT_HEADERFUNCTION=>NULL           
+            CURLOPT_HEADERFUNCTION=>NULL,
+            CURLOPT_RANGE=>""
         ));
         if($ret===FALSE)
             trigger_error(sprintf("cURL error: '%s'",curl_error($this->curl)),E_USER_ERROR);
@@ -574,8 +577,10 @@ Options specific to %1\$s:
         printf("PHPFS: %s called\n", __FUNCTION__);
         return -FUSE_ENOSYS;
     }
-    public function symlink() {
-        printf("PHPFS: %s called\n", __FUNCTION__);
+    
+    //Symlinks are not supported by FTP (maybe some extension, but we can't read symlink info in MLS(D/T) either)
+    public function symlink($from,$to) {
+        printf("PHPFS: %s called, from '%s', to '%s'\n", __FUNCTION__,$from,$to);
         return -FUSE_ENOSYS;
     }
     public function rename() {
@@ -602,13 +607,181 @@ Options specific to %1\$s:
         printf("PHPFS: %s called\n", __FUNCTION__);
         return -FUSE_ENOSYS;
     }
-    public function open() {
-        printf("PHPFS: %s called\n", __FUNCTION__);
-        return -FUSE_ENOSYS;
+    public function open($path, $mode) {
+        printf("PHPFS: %s called, path '%s', mode 0x%x / %o %o\n", __FUNCTION__,$path,$mode,$mode,FUSE_O_LARGEFILE);
+        //First, filter out all the access modes we don't support
+        if(($mode & FUSE_O_CREAT)==FUSE_O_CREAT) {
+            printf("CREAT\n");
+            return -FUSE_EINVAL;
+        }
+        if(($mode & FUSE_O_EXCL)==FUSE_O_EXCL) {
+            printf("EXCL\n");
+            return -FUSE_EINVAL;
+        }
+        if(($mode & FUSE_O_NOCTTY)==FUSE_O_NOCTTY) {
+            printf("NOCTTY\n");
+            return -FUSE_EINVAL;
+        }
+        if(($mode & FUSE_O_TRUNC)==FUSE_O_TRUNC) {
+            printf("TRUNC\n");
+            return -FUSE_EINVAL;
+        }
+        if(($mode & FUSE_O_APPEND)==FUSE_O_APPEND) {
+            printf("APPEND\n");
+            return -FUSE_EINVAL;
+        }
+        if(($mode & FUSE_O_NONBLOCK)==FUSE_O_NONBLOCK) {
+            printf("NONBLOCK\n");
+            return -FUSE_EINVAL;
+        }
+        if(defined("FUSE_O_DSYNC") && ($mode & FUSE_O_DSYNC)==FUSE_O_DSYNC) {
+            printf("DSYNC\n");
+            return -FUSE_EINVAL;
+        }
+        if(defined("FUSE_O_FASYNC") && ($mode & FUSE_O_FASYNC)==FUSE_O_FASYNC) {
+            printf("FASYNC\n");
+            return -FUSE_EINVAL;
+        }
+        if(defined("FUSE_O_DIRECT") && ($mode & FUSE_O_DIRECT)==FUSE_O_DIRECT) {
+            printf("DIRECT\n");
+            return -FUSE_EINVAL;
+        }
+        if(defined("FUSE_O_LARGEFILE") && ($mode & FUSE_O_LARGEFILE)==FUSE_O_LARGEFILE) {
+            //Do nothing, O_LARGEFILE is not supported but the OS supplies it anyway
+//            printf("LARGEFILE\n");
+//            return -FUSE_EINVAL;
+        }
+        if(defined("FUSE_O_DIRECTORY") && ($mode & FUSE_O_DIRECTORY)==FUSE_O_DIRECTORY) {
+            printf("DIRECTORY\n");
+            return -FUSE_EINVAL;
+        }
+        if(defined("FUSE_O_NOFOLLOW") && ($mode & FUSE_O_NOFOLLOW)==FUSE_O_NOFOLLOW) {
+            printf("NOFOLLOW\n");
+            return -FUSE_EINVAL;
+        }
+        if(defined("FUSE_O_NOATIME") && ($mode & FUSE_O_NOATIME)==FUSE_O_NOATIME) {
+            printf("NOATIME\n");
+            return -FUSE_EINVAL;
+        }
+        if(defined("FUSE_O_CLOEXEC") && ($mode & FUSE_O_CLOEXEC)==FUSE_O_CLOEXEC) {
+            printf("CLOEXEC\n");
+            return -FUSE_EINVAL;
+        }
+        if(defined("FUSE_O_SYNC") && ($mode & FUSE_O_SYNC)==FUSE_O_SYNC) {
+            printf("SYNC\n");
+            return -FUSE_EINVAL;
+        }
+        if(defined("FUSE_O_PATH") && ($mode & FUSE_O_PATH)==FUSE_O_PATH) {
+            printf("PATH\n");
+            return -FUSE_EINVAL;
+        }
+
+        //normalize path
+        if(substr($path,0,1)!="/")
+            $path="/".$path;
+
+        //Check if the file actually exists
+        $stat=$this->curl_mlst($path);
+        if($stat<0 && $stat!==FUSE_ENOENT)
+            return $stat;
+        if($stat===FUSE_ENOENT) {
+            //separate this case: it may be that one will try open with E_CREAT, which is not passed to us by FUSE (for now)
+            //todo: check what fuse actually does
+            printf("requested open on a nonexisting file");
+            return $stat;
+        }
+        $want_read=false;
+        $want_write=false;
+        
+        if(($mode & FUSE_O_RDONLY)==FUSE_O_RDONLY) {
+            $want_read=true;
+            printf("RDONLY\n");
+        }
+        if(($mode & FUSE_O_WRONLY)==FUSE_O_WRONLY) {
+            $want_read=false;
+            $want_write=true;
+            printf("WRONLY\n");
+        }
+        if(($mode & FUSE_O_RDWR)==FUSE_O_RDWR) {
+            $want_read=true;
+            $want_write=true;
+            printf("RDWR\n");
+        }
+
+        printf("Result of r/w check: read '%d', write '%d'\n",$want_read,$want_write);
+        if($want_read && !isset($stat["perm"]["r"])) {
+            printf("Tried to read '%s', but file permissions don't allow\n",$path);
+            return -FUSE_EACCES;
+        }
+        if($want_write && !isset($stat["perm"]["w"])) {
+            printf("Tried to write '%s', but file permissions don't allow\n",$path);
+            return -FUSE_EACCES;
+        }
+        
+        $id=$this->next_handle_id++;
+        $handle=array("read"=>$want_read,"write"=>$want_write,"path"=>$path,"state"=>"open","id"=>$id,"stat"=>$stat);
+        $this->handles[$id]=$handle;
+        
+        printf("Returned handle %d for '%s' (0x%x)\n",$id,$path,$mode);
+//        printf("Handles are now: %s",print_r($this->handles,true));
+        return $id;
     }
-    public function read() {
-        printf("PHPFS: %s called\n", __FUNCTION__);
-        return -FUSE_ENOSYS;
+    public function read($path,$handle,$offset,$buf_len,&$buf) {
+        printf("PHPFS: %s called, path '%s', handle '%d', offset '%d', buf_len '%d'\n", __FUNCTION__,$path,$handle,$offset,$buf_len);
+        //check if the handle is valid
+        if(!isset($this->handles[$handle])) {
+            printf("Tried to read from invalid handle %d on file '%s'\n",$handle,$path);
+            return -FUSE_EINVAL;
+        }
+        //check if the handle is a read-handle
+        $handle=$this->handles[$handle];
+        if($handle["read"]===false) {
+            printf("Tried to read from no-read handle %d on file '%s'\n",$handle,$path);
+            return -FUSE_EINVAL;
+        }
+
+        if($path!=$handle["path"]) {
+            printf("Path '%s' differs from handle path '%s'\n",$path,$handle["path"]);
+            $path=$handle["path"];
+        }
+        
+        $abspath=$this->base_url.$path;
+        
+        $begin=$offset;
+        $end=$begin+$buf_len;
+        if($end>$handle["stat"]["size"]) {
+            printf("Truncating end from %d to %d for offset %d buflen %d\n",$end,$handle["stat"]["size"],$begin,$buf_len);
+            $end=$handle["stat"]["size"];
+        }
+        $ret=curl_setopt_array($this->curl,array(
+            CURLOPT_RETURNTRANSFER=>true,
+            CURLOPT_BINARYTRANSFER=>true,
+            CURLOPT_URL=>$abspath,
+            CURLOPT_QUOTE=>array(),
+            CURLOPT_NOBODY=>false,
+            CURLOPT_CUSTOMREQUEST=>"",
+            CURLOPT_HEADERFUNCTION=>NULL,
+            CURLOPT_RANGE=>"$begin-$end"
+        ));
+        if($ret===FALSE)
+            trigger_error(sprintf("cURL error: '%s'",curl_error($this->curl)),E_USER_ERROR);
+        
+        if($this->debug)
+            printf("Requesting cURL file from base '%s' / path '%s' / abspath '%s' / range %d-%d\n",$this->base_url,$path,$abspath,$begin,$end);
+        
+        $ret=curl_exec($this->curl);
+        
+        if($ret===FALSE) {
+            printf("cURL error: '%s'\n",curl_error($this->curl));
+            return -FUSE_EINVAL;
+        }
+        $buf=$ret;
+        
+        if($this->debug_raw)
+            printf("Returning '%s' (%d bytes)\n",$buf,strlen($buf));
+//        elseif($this->debug)
+            printf("Returning %d bytes\n",strlen($buf));
+        return strlen($buf);
     }
     public function write() {
         printf("PHPFS: %s called\n", __FUNCTION__);
@@ -622,9 +795,14 @@ Options specific to %1\$s:
         printf("PHPFS: %s called\n", __FUNCTION__);
         return -FUSE_ENOSYS;
     }
-    public function release() {
-        printf("PHPFS: %s called\n", __FUNCTION__);
-        return -FUSE_ENOSYS;
+    public function release($path,$handle) {
+        printf("PHPFS: %s called, path '%s', handle '%d'\n", __FUNCTION__,$path,$handle);
+        if(!isset($this->handles[$handle])) {
+            printf("Tried to release handle %d on file '%s', and the handle doesn't exist\n",$handle,$path);
+            return -FUSE_EINVAL;
+        }
+        unset($this->handles[$handle]);
+//        printf("Handles are now: %s",print_r($this->handles,true));
     }
     public function fsync() {
         printf("PHPFS: %s called\n", __FUNCTION__);
