@@ -759,9 +759,41 @@ Options specific to %1\$s:
         printf("PHPFS: %s called\n", __FUNCTION__);
         return -FUSE_ENOSYS;
     }
-    public function unlink() {
-        printf("PHPFS: %s called\n", __FUNCTION__);
-        return -FUSE_ENOSYS;
+
+    //remove a file
+    public function unlink($path) {
+        if($this->debug)
+            printf("PHPFS: %s(path='%s') called\n", __FUNCTION__,$path);
+        
+        //check if the file exists
+        $stat=$this->curl_mlst($path);
+        if($stat<0)
+            return $stat;
+        
+        if(!isset($stat["perm"]["d"])) {
+            printf("unlink('%s'): DELE permission not set\n",$path);
+            return -FUSE_EACCES;
+        }
+
+        //delete the old file
+        $ret=$this->curl_dele($path);
+        if($ret<0)
+            return $ret;
+
+        //check if the file doesn't exist
+        $stat=$this->curl_mlst($path);
+        if($stat<0 && $stat!==-FUSE_ENOENT)
+            return $stat;
+        elseif($stat===-FUSE_ENOENT) {
+            //Do nothing, all ok
+        } else {
+            printf("unlink('%s'): file still exists after DELE\n",$path);
+            return -FUSE_EIO;
+        }
+        
+        if($this->debug)
+            printf("unlink('%s'): return 0\n",$path);
+        return 0;
     }
     public function rmdir() {
         printf("PHPFS: %s called\n", __FUNCTION__);
