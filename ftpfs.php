@@ -601,7 +601,7 @@ Options specific to %1\$s:
         }
         
         if(sizeof($files)<2) { //must always be at least two elements big (parent+current dir)
-            printf("getdir: '%s' has less than 2 elements\n");
+            printf("getdir: '%s' has less than 2 elements\n",$path);
             return -FUSE_EINVAL;
         }
         
