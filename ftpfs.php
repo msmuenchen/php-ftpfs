@@ -554,17 +554,12 @@ Options specific to %1\$s:
         return 0;
     }
     
+    //FUSE: get attributes of a file
     public function getattr($path, &$st) {
         if($this->debug)
-            printf("PHPFS: %s called, path: '%s'\n", __FUNCTION__, $path);
+            printf("PHPFS: %s('%s') called\n", __FUNCTION__, $path);
         
-        if(substr($path,0,1)!="/") {
-            if($this->debug)
-                printf("getattr('%s'): path doesn't contain a /");
-            return -FUSE_EINVAL;
-        }
-        $relpath=substr($path,1);
-        $data=$this->curl_mlst($relpath);
+        $data=$this->curl_mlst($path);
         if($data<0)
             return $data;
         
@@ -593,8 +588,11 @@ Options specific to %1\$s:
                 $st['mode']|=0444;
             if(isset($data["perm"]["w"]))
                 $st['mode']|=0222;
-        }
-        if($data["type"]=="dir") {
+            //if the application honors blksize and needs to fetch the whole file,
+            //it will use one read which is better than dozens of small reads
+            $st['blksize']=$st['size'];
+            $st['blocks']=(int)((int)($st['size']/512))+1;
+        } elseif($data["type"]=="dir") {
             $st['mode']|=FUSE_S_IFDIR;
             if(isset($data["perm"]["e"])) //e in directories=cd works, which is mode +x
                 $st['mode']|=0111;
@@ -602,14 +600,20 @@ Options specific to %1\$s:
                 $st['mode']|=0444;
             if(isset($data["perm"]["p"])) //p in directories=can delete files, which is mode +w
                 $st['mode']|=0222;
+            $st['blksize']=1;
+            $st['blocks']=1;
             $st['nlink']=1;
-            printf("dir %s, modes %s\n",$path,compact_pa($data["perm"]));
+        } else {
+            printf("getattr('%s'): neither file nor directory\n",$path);
+            return -FUSE_EINVAL;
         }
         
         if($this->debug)
             printf("PHPFS: %s returning, st is %s\n",__FUNCTION__,compact_pa($st));
+        
         return 0; 
     }
+    
     public function readlink() {
         printf("PHPFS: %s called\n", __FUNCTION__);
         return -FUSE_ENOSYS;
