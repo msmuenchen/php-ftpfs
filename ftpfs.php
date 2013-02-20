@@ -399,7 +399,8 @@ Options specific to %1\$s:
         
         if($this->curl_mlst_data["state"]===FALSE) {
             $ec=substr($this->curl_mlst_data["error"],0,3);
-            printf("MLST errorcode is %s\n",$ec);
+            if($this->debug)
+                printf("MLST errorcode is %s\n",$ec);
             switch($ec) {
                 case "550": //Requested action not taken. File unavailable (e.g., file not found, no access).
                     $ret = -FUSE_ENOENT;
@@ -686,8 +687,12 @@ Options specific to %1\$s:
             printf("mknod('%s'): could not create target\n",$path);
             return -FUSE_EFAULT;
         }
+        
+        if($this->debug)
+            printf("mknod('%s'): return 0\n",$path);
         return 0;
     }
+    
     public function mkdir() {
         printf("PHPFS: %s called\n", __FUNCTION__);
         return -FUSE_ENOSYS;
@@ -832,8 +837,10 @@ Options specific to %1\$s:
             $want_read=true;
             $want_write=true;
         }
-
-        printf("open('%s'): read '%d', write '%d'\n",$path,$want_read,$want_write);
+        
+        if($this->debug)
+            printf("open('%s'): read '%d', write '%d'\n",$path,$want_read,$want_write);
+        
         if($want_read && !isset($stat["perm"]["r"])) {
             printf("open('%s'): READ requested, but not allowed\n",$path);
             return -FUSE_EACCES;
@@ -847,13 +854,15 @@ Options specific to %1\$s:
         $handle=array("read"=>$want_read,"write"=>$want_write,"path"=>$path,"state"=>"open","id"=>$id,"stat"=>$stat);
         $this->handles[$id]=$handle;
         
-        printf("open('%s'): returned handle %d\n",$path,$id);
+        if($this->debug)
+            printf("open('%s'): returning handle %d\n",$path,$id);
         return $id;
     }
     
     //read up to $buf_len bytes from $path opened with $handle
     public function read($path,$handle,$offset,$buf_len,&$buf) {
-        printf("PHPFS: %s(path='%s', handle=%d, offset=%d, buf_len=%d) called\n", __FUNCTION__,$path,$handle,$offset,$buf_len);
+        if($this->debug)
+            printf("PHPFS: %s(path='%s', handle=%d, offset=%d, buf_len=%d) called\n", __FUNCTION__,$path,$handle,$offset,$buf_len);
         
         //check if the handle is valid
         if(!isset($this->handles[$handle])) {
@@ -921,11 +930,17 @@ Options specific to %1\$s:
         if($this->debug)
             printf("PHPFS: %s(path='%s', handle=%d) called\n", __FUNCTION__,$path,$handle);
         
+        //check if the handle is valid
         if(!isset($this->handles[$handle])) {
             printf("release('%s',%d): tried to release invalid handle\n",$path,$handle);
             return -FUSE_EBADF;
         }
+        
         unset($this->handles[$handle]);
+        
+        if($this->debug)
+            printf("release('%s',%d): return 0\n",$path,$handle);
+        return 0;
     }
     
     public function fsync() {
