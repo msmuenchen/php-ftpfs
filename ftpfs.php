@@ -555,6 +555,68 @@ Options specific to %1\$s:
         
         return 0;
     }
+
+    //callback for in-band data of DELE
+    //callback not anonymous because we need to transfer data out of this function using $this
+    public function curl_dele_cb($res,$str) {
+        if($this->debug_raw)
+            printf("curl_dele_cb: got '%s'\n",$str);
+        
+        switch($this->curl_dele_data["state"]) {
+            case 0: //didn't see a 215 from the SYST, wait for it
+                if(substr($str,0,4)!="215 ") {
+                    break;
+                }
+                $this->curl_dele_data["state"]=1;
+            break;
+            case 1: //have seen a 215 OK from SYST, waiting for 250 File deleted
+                if(substr($str,0,3)=="250") {
+                    curl_setopt_array($res,array(CURLOPT_HEADERFUNCTION=>NULL));
+                    $this->curl_dele_data["state"]=FALSE;
+                    break;
+                } else {
+                    //prevent further processing
+                    curl_setopt_array($res,array(CURLOPT_HEADERFUNCTION=>NULL));
+                    $this->curl_dele_data["state"]=FALSE;
+                    $this->curl_dele_data["error"]=$str;
+                    break;
+                }
+            break;
+        }
+        return strlen($str);
+    }
+
+    //delete a file
+    public function curl_dele($path) {
+        if(substr($path,0,1)=="/")
+            $path=substr($path,1);
+        $abspath=$this->remotedir.$path;
+    
+        $this->curl_reset();
+        
+        $this->curl_dele_data=array("state"=>0,"data"=>array());
+        
+        $ret=curl_setopt_array($this->curl,array(
+            CURLOPT_URL=>$this->base_url,
+            CURLOPT_QUOTE=>array("SYST","DELE $abspath"),
+            CURLOPT_HEADERFUNCTION=>array($this,"curl_dele_cb"),
+            CURLOPT_NOBODY=>true,
+        ));
+        if($ret===FALSE)
+            trigger_error(sprintf("cURL error: '%s'",curl_error($this->curl)),E_USER_ERROR);
+        
+        if($this->debug)
+            printf("Requesting cURL DELE from base '%s' / path '%s' / abspath '%s'\n",$this->base_url,$path,$abspath);
+        
+        $ret=curl_exec($this->curl);
+        
+        if($ret===FALSE) {
+            printf("cURL error: '%s'\n",curl_error($this->curl));
+            return -FUSE_EINVAL;
+        }
+        
+        return 0;
+    }
     
     //FUSE: get attributes of a file
     public function getattr($path, &$st) {
