@@ -57,9 +57,9 @@ class PHPFTPFS extends Fuse {
             "-H" => $this->opt_keys["KEY_FUSE_HELP"],
             "-V" => $this->opt_keys["KEY_VERSION"],
             "-d" => $this->opt_keys["KEY_DEBUG"],
-            "host " => $this->opt_keys["KEY_HOST"],
-            "user " => $this->opt_keys["KEY_USER"],
-            "password " => $this->opt_keys["KEY_PASSWORD"],
+            "ftp_host " => $this->opt_keys["KEY_HOST"],
+            "ftp_user " => $this->opt_keys["KEY_USER"],
+            "ftp_password " => $this->opt_keys["KEY_PASSWORD"],
             "cache_maxage " => $this->opt_keys["KEY_CACHE_MAXAGE"],
             "controlport " => $this->opt_keys["KEY_CONTROLPORT"],
             "pasv" => $this->opt_keys["KEY_PASV"],
@@ -183,7 +183,7 @@ class PHPFTPFS extends Fuse {
                 fprintf(STDERR, "%1\$s
 Marco Schuster <marco@m-s-d.eu>
 
-PHP-FUSE template
+cURL FTP-backed FUSE virtual filesystem
 
 Usage: %2\$s [options] mountpoint
 
@@ -192,15 +192,14 @@ Options:
     -h --help                 this help
     -H                        more help
     -V --version              print version info
-    -d                        debug mode
+    -d                        debug mode (debug %1\$s and libfuse)
 
 Options specific to %1\$s:
-    -o host=s                 Hostname or IP of remote host, default 'localhost'
-    -o user=s                 Remote user name, default 'anonymous'
-    -o password=s             Password of remote user, default 'user@example.com'
+    -o ftp_host=s             Hostname or IP of remote host, default 'localhost'
+    -o ftp_user=s             Remote user name, default 'anonymous'
+    -o ftp_password=s         Password of remote user, default 'user@example.com'
     -o cache_maxage=n         Maximum age of cached files in seconds, default 60
     -o pasv                   Use PASV FTP mode instead of active transfer mode
-    -o dataport=n             Data port of FTP server (for ACT transfer), default 20
     -o controlport=n          Control port of FTP server, default 21
     -o remotedir=s            remote directory to use as base, default /
     -o ipv6                   use IPv6 if having an AAAA record for the server
@@ -237,15 +236,15 @@ Options specific to %1\$s:
                 return 0;
                 break;
             case $this->opt_keys["KEY_USER"]:
-                $this->user=substr($arg,5);
+                $this->user=substr($arg,strlen("ftp_user")+1);
                 return 0;
                 break;
             case $this->opt_keys["KEY_HOST"]:
-                $this->host=substr($arg,5);
+                $this->host=substr($arg,strlen("ftp_host")+1);
                 return 0;
                 break;
             case $this->opt_keys["KEY_PASSWORD"]:
-                $this->pass=substr($arg,9);
+                $this->pass=substr($arg,strlen("ftp_password")+1);
                 return 0;
                 break;
             case $this->opt_keys["KEY_PASV"]:
