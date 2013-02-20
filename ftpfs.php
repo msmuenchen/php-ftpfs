@@ -9,7 +9,9 @@ class PHPFTPFS extends Fuse {
     public $name = "phpftpfs";
     public $version = "0.1a";
     public $debug=false;
+    public $run_fuse=true; //will fuse_main() be called?
     
+    public $run_ftpfs=true; //will the ftp fs actually be run?
     public $host="localhost";
     public $user="anonymous";
     public $pass="user@example.com";
@@ -84,82 +86,84 @@ class PHPFTPFS extends Fuse {
             printf("Error in opt_parse\n");
             exit;
         }
-        if($this->debug) {
-            printf("Opening connection to ftp://%s:%s@%s:%d%s\n",$this->user,$this->pass,$this->host,$this->controlport,$this->remotedir);
-            if($this->pasv)
-                printf("Using passive transfer\n");
-            if($this->ipv6)
-                printf("Using IPv6 where available\n");
-            if($this->cachedir!="")
-                printf("Using '%s' as cache directory, maximum age=%d seconds\n",$this->cachedir,$this->cache_maxage);
-        }
-
-        //Assemble the URL
-        if($this->ipv6) {
-            $d=dns_get_record($this->host,DNS_AAAA);
-        } else {
-            $d=dns_get_record($this->host,DNS_A);
-        }
-        if($d===FALSE)
-            trigger_error(sprintf("Host %s not found",$this->host),E_USER_ERROR);
-        $d=$d[0];
-
-        $ip=($this->ipv6) ? "[".$d["ipv6"]."]" : $d["ip"];
         
-        $this->base_url=sprintf("ftp://%s:%s@%s:%d%s",urlencode($this->user),urlencode($this->pass),$ip,$this->controlport,$this->remotedir);
-        
-        if($this->debug) {
-            printf("cURL base URL: '%s'\n",$this->base_url);
-        }
+        if($this->run_ftpfs) {
+            if($this->debug) {
+                printf("Opening connection to ftp://%s:%s@%s:%d%s\n",$this->user,$this->pass,$this->host,$this->controlport,$this->remotedir);
+                if($this->pasv)
+                    printf("Using passive transfer\n");
+                if($this->ipv6)
+                    printf("Using IPv6 where available\n");
+                if($this->cachedir!="")
+                    printf("Using '%s' as cache directory, maximum age=%d seconds\n",$this->cachedir,$this->cache_maxage);
+            }
 
-        //Do we have a cache directory? If yes, test if it is usable.
-        if($this->use_cache) {
-            //Check if the directory exists
-            $p=realpath($this->cachedir);
-            if($p===false) {
-                trigger_error(sprintf("Cache directory '%s' is not a valid directory, disabling cache",$this->cachedir),E_USER_WARNING);
-                $this->use_cache=false;
+            //Assemble the URL
+            if($this->ipv6) {
+                $d=dns_get_record($this->host,DNS_AAAA);
             } else {
-                $this->cachedir=$p;
-                if($this->debug)
-                    printf("Root cachedir: '%s'\n",$this->cachedir);
-                
-                //Try to create the cachedir for this connection (hash of base_url)
-                $this->cachedir.=sprintf("/%s_%s/",$this->host,md5($this->base_url));
-                if($this->debug)
-                    printf("Connection cachedir: '%s'\n",$this->cachedir);
-                if(!is_dir($this->cachedir)) {
-                    $ret=mkdir($this->cachedir,0700);
-                    if($ret===false)
-                        trigger_error(sprintf("Could not create cache directory '%s'",$this->cachedir),E_USER_ERROR);
+                $d=dns_get_record($this->host,DNS_A);
+            }
+            if($d===FALSE)
+                trigger_error(sprintf("Host %s not found",$this->host),E_USER_ERROR);
+            $d=$d[0];
+
+            $ip=($this->ipv6) ? "[".$d["ipv6"]."]" : $d["ip"];
+            
+            $this->base_url=sprintf("ftp://%s:%s@%s:%d%s",urlencode($this->user),urlencode($this->pass),$ip,$this->controlport,$this->remotedir);
+            
+            if($this->debug) {
+                printf("cURL base URL: '%s'\n",$this->base_url);
+            }
+
+            //Do we have a cache directory? If yes, test if it is usable.
+            if($this->use_cache) {
+                //Check if the directory exists
+                $p=realpath($this->cachedir);
+                if($p===false) {
+                    trigger_error(sprintf("Cache directory '%s' is not a valid directory, disabling cache",$this->cachedir),E_USER_WARNING);
+                    $this->use_cache=false;
+                } else {
+                    $this->cachedir=$p;
+                    if($this->debug)
+                        printf("Root cachedir: '%s'\n",$this->cachedir);
+                    
+                    //Try to create the cachedir for this connection (hash of base_url)
+                    $this->cachedir.=sprintf("/%s_%s/",$this->host,md5($this->base_url));
+                    if($this->debug)
+                        printf("Connection cachedir: '%s'\n",$this->cachedir);
+                    if(!is_dir($this->cachedir)) {
+                        $ret=mkdir($this->cachedir,0700);
+                        if($ret===false)
+                            trigger_error(sprintf("Could not create cache directory '%s'",$this->cachedir),E_USER_ERROR);
+                    }
                 }
             }
-        }
-        
-        //Open (and test) cURL connection
-        $this->curl=curl_init($this->base_url."wp-content/");
-        if($this->debug_curl) {
-            $ret=curl_setopt($this->curl,CURLOPT_VERBOSE,true);
+            
+            //Open (and test) cURL connection
+            printf("Opening connection to %s\n",$this->base_url);
+            $this->curl=curl_init($this->base_url);
+            if($this->debug_curl) {
+                $ret=curl_setopt($this->curl,CURLOPT_VERBOSE,true);
+                if($ret===FALSE)
+                    trigger_error(sprintf("cURL error: '%s'",curl_error($this->curl)),E_USER_ERROR);
+            }
+            $ret=curl_setopt_array($this->curl,array(CURLOPT_RETURNTRANSFER=>true,CURLOPT_BINARYTRANSFER=>true));
             if($ret===FALSE)
                 trigger_error(sprintf("cURL error: '%s'",curl_error($this->curl)),E_USER_ERROR);
+            
+            $ret=curl_exec($this->curl);
+            if($ret===FALSE)
+                trigger_error(sprintf("cURL error: '%s'",curl_error($this->curl)),E_USER_ERROR);
+        }            
+        
+        if($this->run_fuse) {
+            //run FUSE
+            $argv[0]=$this->name;
+            if($this->debug)
+                printf("Calling fuse_main with args: %s",print_r($argv,true));
+            $this->fuse_main($argc, $argv);
         }
-        $ret=curl_setopt_array($this->curl,array(CURLOPT_RETURNTRANSFER=>true,CURLOPT_BINARYTRANSFER=>true));
-        if($ret===FALSE)
-            trigger_error(sprintf("cURL error: '%s'",curl_error($this->curl)),E_USER_ERROR);
-        
-        $ret=curl_exec($this->curl);
-        if($ret===FALSE)
-            trigger_error(sprintf("cURL error: '%s'",curl_error($this->curl)),E_USER_ERROR);
-
-/*        print_r($this->curl_mlsd("/"));
-        print_r($this->curl_mlsd("/wp-content/themes/Aqua/"));
-        print_r($this->curl_mlsd("/wp-config.php"));
-        
-        exit;
-*/        //run FUSE
-        if($this->debug)
-            printf("Calling fuse_main with args: %s",print_r($argv,true));
-        $this->fuse_main($argc, $argv);
     }
     public function opt_proc(&$data, $arg, $key, &$argc, &$argv) {
         // return -1 to indicate error, 0 to accept parameter,1 to retain parameter and pase to FUSE
@@ -173,6 +177,9 @@ class PHPFTPFS extends Fuse {
                 $argc++;
             //No break, because we display our own help, and fuse adds its help then
             case $this->opt_keys["KEY_HELP"]:
+                $this->run_ftpfs=false;
+                if($key!=$this->opt_keys["KEY_FUSE_HELP"])
+                    $this->run_fuse=false; //-h doesn't invoke fuse_main, but -H does
                 fprintf(STDERR, "%1\$s
 Marco Schuster <marco@m-s-d.eu>
 
@@ -208,6 +215,7 @@ Options specific to %1\$s:
                 return 0;
                 break;
             case $this->opt_keys["KEY_VERSION"]:
+                $this->run_ftpfs=false;
                 printf("%s %s\n", $this->name, $this->version);
                 return 1;
                 break;
