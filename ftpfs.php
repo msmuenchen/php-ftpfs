@@ -26,6 +26,8 @@ class PHPFTPFS extends Fuse {
     public $debug_curl=false;
     public $base_url="";
     public $debug_raw=false;
+    public $uid=0;
+    public $gid=0;
     
     private $curl=NULL;
     private $handles=array(); //keep track of the handles returned by open() here
@@ -139,6 +141,9 @@ class PHPFTPFS extends Fuse {
                     }
                 }
             }
+            
+            $this->uid=posix_geteuid();
+            $this->gid=posix_getegid();
             
             //Open (and test) cURL connection
             printf("Opening connection to %s\n",$this->base_url);
@@ -638,9 +643,9 @@ Options specific to %1\$s:
         $st['ino']     = 0;
         $st['mode']    = 0;
         $st['nlink']   = 0;
-        //TODO: assign effective uid/gid...
-        $st['uid']     = 0;
-        $st['gid']     = 0;
+        //These have been set at startup to avoid an extra syscall at each request
+        $st['uid']     = $this->uid;
+        $st['gid']     = $this->gid;
         $st['rdev']    = 0;
         $st['size']    = 0;
         $st['atime']   = $data["modify"];
