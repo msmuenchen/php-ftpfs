@@ -952,8 +952,13 @@ Options specific to %1\$s:
 //"compact" print_r($a,true)
 function compact_pa($a) {
     $buf="";
-    foreach($a as $k=>$v)
+    if(!is_array($a))
+        return $a;
+    foreach($a as $k=>$v) {
+        if(is_array($v))
+            $v=compact_pa($v);
         $buf.="'$k'=>'$v',";
+    }
     return substr($buf,0,-1);
 }
 $fuse = new PHPFTPFS();
