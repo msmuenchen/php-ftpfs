@@ -213,6 +213,7 @@ Options specific to %1\$s:
                 return 1;
                 break;
             case $this->opt_keys["KEY_DEBUG_CURL"]:
+                $this->debug=true;
                 $this->debug_curl=true;
                 return 0;
                 break;
