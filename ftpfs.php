@@ -803,13 +803,13 @@ Options specific to %1\$s:
         //check if the handle is valid
         if(!isset($this->handles[$handle])) {
             printf("Tried to read from invalid handle %d on file '%s'\n",$handle,$path);
-            return -FUSE_EINVAL;
+            return -FUSE_EBADF;
         }
         //check if the handle is a read-handle
         $handle=$this->handles[$handle];
         if($handle["read"]===false) {
             printf("Tried to read from no-read handle %d on file '%s'\n",$handle,$path);
-            return -FUSE_EINVAL;
+            return -FUSE_EBADF;
         }
 
         if($path!=$handle["path"]) {
@@ -867,7 +867,7 @@ Options specific to %1\$s:
         printf("PHPFS: %s called, path '%s', handle '%d'\n", __FUNCTION__,$path,$handle);
         if(!isset($this->handles[$handle])) {
             printf("Tried to release handle %d on file '%s', and the handle doesn't exist\n",$handle,$path);
-            return -FUSE_EINVAL;
+            return -FUSE_EBADF;
         }
         unset($this->handles[$handle]);
 //        printf("Handles are now: %s",print_r($this->handles,true));
