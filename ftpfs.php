@@ -824,9 +824,52 @@ Options specific to %1\$s:
         printf("PHPFS: %s called\n", __FUNCTION__);
         return -FUSE_ENOSYS;
     }
-    public function truncate() {
-        printf("PHPFS: %s called\n", __FUNCTION__);
-        return -FUSE_ENOSYS;
+    
+    //truncate (or expand, when $length>filesize) a file
+    public function truncate($path,$length) {
+        if($this->debug)
+            printf("PHPFS: %s(path='%s', length=%d) called\n", __FUNCTION__,$path,$length);
+        
+        //truncate to specific length is not supported
+        //todo: implement this using get, substr
+        if($length > 0) {
+            printf("truncate('%s',%d): length adjustments not supported\n",$path,$length);
+        }
+        
+        //check if the file exists
+        $stat=$this->curl_mlst($path);
+        if($stat<0)
+            return $stat;
+        
+        //delete the old file
+        $ret=$this->curl_dele($path);
+        if($ret<0)
+            return $ret;
+
+        //check if the file doesn't exist
+        $stat=$this->curl_mlst($path);
+        if($stat<0 && $stat!==-FUSE_ENOENT)
+            return $stat;
+        elseif($stat===-FUSE_ENOENT) {
+            //Do nothing, all ok
+        } else {
+            printf("truncate('%s',%d): file still exists after DELE\n",$path,$length);
+            return -FUSE_EIO;
+        }
+        
+        //put an empty file
+        $ret=$this->curl_put($path,0,"");
+        if($ret<0)
+            return $ret;
+        
+        //check if the file exists
+        $stat=$this->curl_mlst($path);
+        if($stat<0)
+            return $stat;
+        
+        if($this->debug)
+            printf("truncate('%s',%d): return 0\n",$path,$length);
+        return 0;
     }
     public function utime() {
         printf("PHPFS: %s called\n", __FUNCTION__);
