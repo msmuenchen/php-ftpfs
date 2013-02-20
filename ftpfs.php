@@ -732,114 +732,113 @@ Options specific to %1\$s:
         printf("PHPFS: %s called\n", __FUNCTION__);
         return -FUSE_ENOSYS;
     }
+    
+    //open a file
     public function open($path, $mode) {
-        printf("PHPFS: %s called, path '%s', mode 0x%x / %o %o\n", __FUNCTION__,$path,$mode,$mode,FUSE_O_LARGEFILE);
+        if($this->debug)
+            printf("PHPFS: %s(path='%s', mode=0%o) called\n", __FUNCTION__,$path,$mode);
+        
         //First, filter out all the access modes we don't support
         if(($mode & FUSE_O_CREAT)==FUSE_O_CREAT) {
-            printf("CREAT\n");
+            printf("open('%s'): invalid mode CREAT\n",$path);
             return -FUSE_EINVAL;
         }
         if(($mode & FUSE_O_EXCL)==FUSE_O_EXCL) {
-            printf("EXCL\n");
+            printf("open('%s'): invalid mode EXCL\n",$path);
             return -FUSE_EINVAL;
         }
         if(($mode & FUSE_O_NOCTTY)==FUSE_O_NOCTTY) {
-            printf("NOCTTY\n");
+            printf("open('%s'): invalid mode NOCTTY\n",$path);
             return -FUSE_EINVAL;
         }
         if(($mode & FUSE_O_TRUNC)==FUSE_O_TRUNC) {
-            printf("TRUNC\n");
+            printf("open('%s'): invalid mode TRUNC\n",$path);
             return -FUSE_EINVAL;
         }
         if(($mode & FUSE_O_APPEND)==FUSE_O_APPEND) {
-            printf("APPEND\n");
+            printf("open('%s'): invalid mode APPEND\n",$path);
             return -FUSE_EINVAL;
         }
         if(($mode & FUSE_O_NONBLOCK)==FUSE_O_NONBLOCK) {
-            printf("NONBLOCK\n");
+            printf("open('%s'): invalid mode NONBLOCK\n",$path);
             return -FUSE_EINVAL;
         }
         if(defined("FUSE_O_DSYNC") && ($mode & FUSE_O_DSYNC)==FUSE_O_DSYNC) {
-            printf("DSYNC\n");
+            printf("open('%s'): invalid mode DSYNC\n",$path);
             return -FUSE_EINVAL;
         }
         if(defined("FUSE_O_FASYNC") && ($mode & FUSE_O_FASYNC)==FUSE_O_FASYNC) {
-            printf("FASYNC\n");
+            printf("open('%s'): invalid mode FASYNC\n",$path);
             return -FUSE_EINVAL;
         }
         if(defined("FUSE_O_DIRECT") && ($mode & FUSE_O_DIRECT)==FUSE_O_DIRECT) {
-            printf("DIRECT\n");
+            printf("open('%s'): invalid mode DIRECT\n",$path);
             return -FUSE_EINVAL;
         }
         if(defined("FUSE_O_LARGEFILE") && ($mode & FUSE_O_LARGEFILE)==FUSE_O_LARGEFILE) {
             //Do nothing, O_LARGEFILE is not supported but the OS supplies it anyway
-//            printf("LARGEFILE\n");
+//            printf("open('%s'): invalid mode LARGEFILE\n",$path);
 //            return -FUSE_EINVAL;
         }
         if(defined("FUSE_O_DIRECTORY") && ($mode & FUSE_O_DIRECTORY)==FUSE_O_DIRECTORY) {
-            printf("DIRECTORY\n");
+            printf("open('%s'): invalid mode DIRECTORY\n",$path);
             return -FUSE_EINVAL;
         }
         if(defined("FUSE_O_NOFOLLOW") && ($mode & FUSE_O_NOFOLLOW)==FUSE_O_NOFOLLOW) {
-            printf("NOFOLLOW\n");
+            printf("open('%s'): invalid mode NOFOLLOW\n",$path);
             return -FUSE_EINVAL;
         }
         if(defined("FUSE_O_NOATIME") && ($mode & FUSE_O_NOATIME)==FUSE_O_NOATIME) {
-            printf("NOATIME\n");
+            printf("open('%s'): invalid mode NOATIME\n",$path);
             return -FUSE_EINVAL;
         }
         if(defined("FUSE_O_CLOEXEC") && ($mode & FUSE_O_CLOEXEC)==FUSE_O_CLOEXEC) {
-            printf("CLOEXEC\n");
+            printf("open('%s'): invalid mode CLOEXEC\n",$path);
             return -FUSE_EINVAL;
         }
         if(defined("FUSE_O_SYNC") && ($mode & FUSE_O_SYNC)==FUSE_O_SYNC) {
-            printf("SYNC\n");
+            printf("open('%s'): invalid mode SYNC\n",$path);
             return -FUSE_EINVAL;
         }
         if(defined("FUSE_O_PATH") && ($mode & FUSE_O_PATH)==FUSE_O_PATH) {
-            printf("PATH\n");
+            printf("open('%s'): invalid mode PATH\n",$path);
             return -FUSE_EINVAL;
         }
-
-        //normalize path
-        if(substr($path,0,1)!="/")
-            $path="/".$path;
 
         //Check if the file actually exists
         $stat=$this->curl_mlst($path);
         if($stat<0 && $stat!==FUSE_ENOENT)
             return $stat;
+
         if($stat===FUSE_ENOENT) {
             //separate this case: it may be that one will try open with E_CREAT, which is not passed to us by FUSE (for now)
             //todo: check what fuse actually does
-            printf("requested open on a nonexisting file");
+            printf("open('%s'): file does not exist",$path);
             return $stat;
         }
+        
         $want_read=false;
         $want_write=false;
         
         if(($mode & FUSE_O_RDONLY)==FUSE_O_RDONLY) {
             $want_read=true;
-            printf("RDONLY\n");
         }
         if(($mode & FUSE_O_WRONLY)==FUSE_O_WRONLY) {
             $want_read=false;
             $want_write=true;
-            printf("WRONLY\n");
         }
         if(($mode & FUSE_O_RDWR)==FUSE_O_RDWR) {
             $want_read=true;
             $want_write=true;
-            printf("RDWR\n");
         }
 
-        printf("Result of r/w check: read '%d', write '%d'\n",$want_read,$want_write);
+        printf("open('%s'): read '%d', write '%d'\n",$path,$want_read,$want_write);
         if($want_read && !isset($stat["perm"]["r"])) {
-            printf("Tried to read '%s', but file permissions don't allow\n",$path);
+            printf("open('%s'): READ requested, but not allowed\n",$path);
             return -FUSE_EACCES;
         }
         if($want_write && !isset($stat["perm"]["w"])) {
-            printf("Tried to write '%s', but file permissions don't allow\n",$path);
+            printf("open('%s'): WRITE requested, but not allowed\n",$path);
             return -FUSE_EACCES;
         }
         
@@ -847,8 +846,7 @@ Options specific to %1\$s:
         $handle=array("read"=>$want_read,"write"=>$want_write,"path"=>$path,"state"=>"open","id"=>$id,"stat"=>$stat);
         $this->handles[$id]=$handle;
         
-        printf("Returned handle %d for '%s' (0x%x)\n",$id,$path,$mode);
-//        printf("Handles are now: %s",print_r($this->handles,true));
+        printf("open('%s'): returned handle %d\n",$path,$id);
         return $id;
     }
     
