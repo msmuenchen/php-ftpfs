@@ -1065,9 +1065,21 @@ Options specific to %1\$s:
         printf("PHPFS: %s called\n", __FUNCTION__);
         return -FUSE_ENOSYS;
     }
-    public function flush() {
-        printf("PHPFS: %s called\n", __FUNCTION__);
-        return -FUSE_ENOSYS;
+    
+    //flush is not needed, we PUT directly on write calls
+    public function flush($path,$handle) {
+        if($this->debug)
+            printf("PHPFS: %s(path='%s', handle=%d) called\n", __FUNCTION__,$path,$handle);
+
+        //check if the handle is valid
+        if(!isset($this->handles[$handle])) {
+            printf("flush('%s',%d): invalid handle\n",$path,$handle);
+            return -FUSE_EBADF;
+        }
+        
+        if($this->debug)
+            printf("flush('%s',%d): return 0\n",$path,$handle);
+        return 0;
     }
     
     //release $handle for $path
