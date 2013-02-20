@@ -45,7 +45,8 @@ class PHPFTPFS extends Fuse {
             "KEY_ENABLE_IPV6",
             "KEY_CACHEDIR",
             "KEY_DEBUG_CURL",
-            "KEY_DEBUG_RAW"
+            "KEY_DEBUG_RAW",
+            "KEY_DEBUG_USER"
         ));
         $this->opts     = array(
             "--help" => $this->opt_keys["KEY_HELP"],
@@ -64,7 +65,8 @@ class PHPFTPFS extends Fuse {
             "ipv6" => $this->opt_keys["KEY_ENABLE_IPV6"],
             "cachedir " => $this->opt_keys["KEY_CACHEDIR"],
             "debug_curl" => $this->opt_keys["KEY_DEBUG_CURL"],
-            "debug_raw" => $this->opt_keys["KEY_DEBUG_RAW"]
+            "debug_raw" => $this->opt_keys["KEY_DEBUG_RAW"],
+            "debug_user" => $this->opt_keys["KEY_DEBUG_USER"]
         );
         $this->userdata = array();
     }
@@ -198,6 +200,7 @@ Options specific to %1\$s:
     -o cachedir=s             directory for file cache, will be set readable only
                               to the user calling the script. Can be shared by multiple
                               %1\$s instances. If not specified, caching is disabled.
+    -o debug_user             debug only %1\$s code, but not FUSE
     -o debug_curl             set CURLOPT_VERBOSE
     -o debug_raw              print the raw data recieved by the curl interfaces
 
@@ -211,6 +214,10 @@ Options specific to %1\$s:
             case $this->opt_keys["KEY_DEBUG"]:
                 $this->debug=true;
                 return 1;
+                break;
+            case $this->opt_keys["KEY_DEBUG_USER"]:
+                $this->debug=true;
+                return 0;
                 break;
             case $this->opt_keys["KEY_DEBUG_CURL"]:
                 $this->debug=true;
