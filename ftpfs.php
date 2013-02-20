@@ -899,8 +899,7 @@ Options specific to %1\$s:
             return -FUSE_EINVAL;
         }
         if(($mode & FUSE_O_APPEND)==FUSE_O_APPEND) {
-            printf("open('%s'): invalid mode APPEND\n",$path);
-            return -FUSE_EINVAL;
+            //Do nothing. The OS will set $offset in the write calls, we do not have to track it
         }
         if(($mode & FUSE_O_NONBLOCK)==FUSE_O_NONBLOCK) {
             printf("open('%s'): invalid mode NONBLOCK\n",$path);
