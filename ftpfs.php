@@ -914,15 +914,19 @@ Options specific to %1\$s:
         printf("PHPFS: %s called\n", __FUNCTION__);
         return -FUSE_ENOSYS;
     }
+    
+    //release $handle for $path
     public function release($path,$handle) {
-        printf("PHPFS: %s called, path '%s', handle '%d'\n", __FUNCTION__,$path,$handle);
+        if($this->debug)
+            printf("PHPFS: %s(path='%s', handle=%d) called\n", __FUNCTION__,$path,$handle);
+        
         if(!isset($this->handles[$handle])) {
-            printf("Tried to release handle %d on file '%s', and the handle doesn't exist\n",$handle,$path);
+            printf("release('%s',%d): tried to release invalid handle\n",$path,$handle);
             return -FUSE_EBADF;
         }
         unset($this->handles[$handle]);
-//        printf("Handles are now: %s",print_r($this->handles,true));
     }
+    
     public function fsync() {
         printf("PHPFS: %s called\n", __FUNCTION__);
         return -FUSE_ENOSYS;
