@@ -534,8 +534,8 @@ Options specific to %1\$s:
             CURLOPT_URL=>$abspath,
             CURLOPT_RESUME_FROM=>$offset,
             CURLOPT_INFILE=>$tmp,
-            CURLOPT_INFILESIZE=>strlen($buf),
-            CURLOPT_PUT=>true,
+            CURLOPT_INFILESIZE=>$offset+strlen($buf),
+            CURLOPT_PUT=>true
         ));
         if($ret===FALSE)
             trigger_error(sprintf("cURL error: '%s'",curl_error($this->curl)),E_USER_ERROR);
