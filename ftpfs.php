@@ -700,11 +700,14 @@ Options specific to %1\$s:
         return -FUSE_ENOSYS;
     }
     
+    //create a symlink
     //Symlinks are not supported by FTP (maybe some extension, but we can't read symlink info in MLS(D/T) either)
     public function symlink($from,$to) {
-        printf("PHPFS: %s called, from '%s', to '%s'\n", __FUNCTION__,$from,$to);
+        if($this->debug)
+            printf("PHPFS: %s(from='%s', to='%s') called\n", __FUNCTION__,$from,$to);
         return -FUSE_ENOSYS;
     }
+    
     public function rename() {
         printf("PHPFS: %s called\n", __FUNCTION__);
         return -FUSE_ENOSYS;
