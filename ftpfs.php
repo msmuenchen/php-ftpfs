@@ -268,6 +268,25 @@ Options specific to %1\$s:
         }
     }
     
+    //reset all the stuff used in the various curl requests
+    public function curl_reset() {
+        $ret=curl_setopt_array($this->curl,array(
+            CURLOPT_RETURNTRANSFER=>true,
+            CURLOPT_BINARYTRANSFER=>true,
+            CURLOPT_QUOTE=>array(),
+            CURLOPT_NOBODY=>false,
+            CURLOPT_CUSTOMREQUEST=>"",
+            CURLOPT_HEADERFUNCTION=>NULL,
+            CURLOPT_RESUME_FROM=>0,
+            CURLOPT_INFILE=>NULL,
+            CURLOPT_INFILESIZE=>0,
+            CURLOPT_PUT=>false,
+            CURLOPT_RANGE=>""
+        ));
+        if($ret===FALSE)
+            trigger_error(sprintf("cURL error: '%s'",curl_error($this->curl)),E_USER_ERROR);
+        
+    }
     //callback not anonymous because we need to transfer data out of this function
     public function curl_mlst_cb($res,$str) {
         if($this->debug_raw)
@@ -318,15 +337,14 @@ Options specific to %1\$s:
         $abspath=$this->remotedir.$path;
 
         $this->curl_mlst_data=array("state"=>0,"data"=>array());
+        
+        $this->curl_reset();
+        
         $ret=curl_setopt_array($this->curl,array(
-            CURLOPT_RETURNTRANSFER=>true,
-            CURLOPT_BINARYTRANSFER=>true,
             CURLOPT_URL=>$this->base_url,
-            CURLOPT_QUOTE=>array("SYST","MLST $abspath"),//"CWD $abspath","MLST"),
+            CURLOPT_QUOTE=>array("SYST","MLST $abspath"),
             CURLOPT_NOBODY=>true,
-            CURLOPT_CUSTOMREQUEST=>"",
             CURLOPT_HEADERFUNCTION=>array($this,"curl_mlst_cb"),
-            CURLOPT_RANGE=>""
         ));
         if($ret===FALSE)
             trigger_error(sprintf("cURL error: '%s'",curl_error($this->curl)),E_USER_ERROR);
@@ -396,17 +414,14 @@ Options specific to %1\$s:
         
         if(substr($path,0,1)=="/")
             $path=substr($path,1);
+    
         $abspath=$this->base_url.$path;
 
+        $this->curl_reset();
+        
         $ret=curl_setopt_array($this->curl,array(
-            CURLOPT_RETURNTRANSFER=>true,
-            CURLOPT_BINARYTRANSFER=>true,
             CURLOPT_URL=>$abspath,
-            CURLOPT_QUOTE=>array(),
-            CURLOPT_NOBODY=>false,
             CURLOPT_CUSTOMREQUEST=>"MLSD",
-            CURLOPT_HEADERFUNCTION=>NULL,
-            CURLOPT_RANGE=>""
         ));
         if($ret===FALSE)
             trigger_error(sprintf("cURL error: '%s'",curl_error($this->curl)),E_USER_ERROR);
@@ -754,15 +769,11 @@ Options specific to %1\$s:
             printf("Truncating end from %d to %d for offset %d buflen %d\n",$end,$handle["stat"]["size"],$begin,$buf_len);
             $end=$handle["stat"]["size"];
         }
+        $this->curl_reset();
+        
         $ret=curl_setopt_array($this->curl,array(
-            CURLOPT_RETURNTRANSFER=>true,
-            CURLOPT_BINARYTRANSFER=>true,
             CURLOPT_URL=>$abspath,
-            CURLOPT_QUOTE=>array(),
-            CURLOPT_NOBODY=>false,
-            CURLOPT_CUSTOMREQUEST=>"",
-            CURLOPT_HEADERFUNCTION=>NULL,
-            CURLOPT_RANGE=>"$begin-$end"
+            CURLOPT_RANGE=>"$begin-$end",
         ));
         if($ret===FALSE)
             trigger_error(sprintf("cURL error: '%s'",curl_error($this->curl)),E_USER_ERROR);
