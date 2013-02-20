@@ -548,6 +548,7 @@ Options specific to %1\$s:
             return -FUSE_EINVAL;
         }
         
+        //this deletes the tmpfile, too
         fclose($tmp);
         
         return 0;
