@@ -333,13 +333,10 @@ Options specific to %1\$s:
     public function curl_mlst_cb($res,$str) {
         if($this->debug_raw)
             printf("curl_mlst_cb: got '%s'\n",$str);
+        
         switch($this->curl_mlst_data["state"]) {
-            case 0: //didn't see a 215 from the SYST
+            case 0: //didn't see a 215 from the SYST, wait for it
                 if(substr($str,0,4)!="215 ") {
-                    //prevent further processing
-//                    curl_setopt_array($res,array(CURLOPT_HEADERFUNCTION=>NULL));
-//                    $this->curl_mlst_data["state"]=FALSE;
-//                    $this->curl_mlst_data["error"]=$str;
                     break;
                 }
                 $this->curl_mlst_data["state"]=1;
@@ -366,14 +363,13 @@ Options specific to %1\$s:
         return strlen($str);
     }
     
-    //MLST: get information about a specific file
+    //MLST: get information about a specific file or directory (stat() equivalent)
     //TODO: If the connection gets reset, the callback has no information about the state of the connection
     //      and so will see the "220 Ok login now" message as start message for the parsing. So, we hope
     //      that cURL doesn't run SYST on connects in the future and use its unique 215 to establish a clean
     //      state.
     // See also: RFC 3659 @ http://www.ietf.org/rfc/rfc3659.txt
     public function curl_mlst($path) {
-        //we'll prepend the path with remotedir, which already has a slash
         if(substr($path,0,1)=="/")
             $path=substr($path,1);
         $abspath=$this->remotedir.$path;
@@ -402,7 +398,7 @@ Options specific to %1\$s:
         
         if($this->curl_mlst_data["state"]===FALSE) {
             $ec=substr($this->curl_mlst_data["error"],0,3);
-            printf("ec is %s\n",$ec);
+            printf("MLST errorcode is %s\n",$ec);
             switch($ec) {
                 case "550": //Requested action not taken. File unavailable (e.g., file not found, no access).
                     $ret = -FUSE_ENOENT;
@@ -421,7 +417,11 @@ Options specific to %1\$s:
             $ret=$this->curl_mls_parse($this->curl_mlst_data["data"][0]);
         }
         
-        curl_setopt_array($this->curl,array(CURLOPT_HEADERFUNCTION=>NULL));
+        //free up memory
+        $this->curl_mlst_data=array();
+        
+        if($this->debug)
+            printf("MLST result: '%s'\n",compact_pa($ret));
         return $ret;
     }
     
@@ -472,7 +472,6 @@ Options specific to %1\$s:
             $ret[$entry["filename"]]=$entry;
         }
         
-        curl_setopt_array($this->curl,array(CURLOPT_HEADERFUNCTION=>NULL));
         return $ret;
     }
     public function curl_put($path,$offset,$buf) {
