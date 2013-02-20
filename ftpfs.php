@@ -663,21 +663,26 @@ Options specific to %1\$s:
         
         return 0;
     }
+    
+    //create a file (other nodes not supported)
     public function mknod($path,$mode,$dev) {
-        printf("PHPFS: %s called, path '%s', mode '%o', dev '%d'\n", __FUNCTION__,$path,$mode,$dev);
+        if($this->debug)
+            printf("PHPFS: %s(path='%s', mode='%o', dev='%d') called\n", __FUNCTION__,$path,$mode,$dev);
         
         //check if the given endpoint already exists
         $stat=$this->curl_mlst($path);
         if($stat!=-FUSE_ENOENT) {
-            printf("mknod called on existing file %s\n",$path);
+            printf("mknod('%s'): target exists\n",$path);
             return -FUSE_EEXISTS;
         }
         $ret=$this->curl_put($path,0,"");
         
+        //TODO: chmod
+        
         //check if the given endpoint exists now
         $stat=$this->curl_mlst($path);
         if($stat==-FUSE_ENOENT) {
-            printf("mknod unable to create file %s\n",$path);
+            printf("mknod('%s'): could not create target\n",$path);
             return -FUSE_EFAULT;
         }
         return 0;
