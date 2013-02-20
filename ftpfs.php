@@ -294,7 +294,42 @@ Options specific to %1\$s:
             trigger_error(sprintf("cURL error: '%s'",curl_error($this->curl)),E_USER_ERROR);
         
     }
-    //callback not anonymous because we need to transfer data out of this function
+    
+    //parse a line returned by MLS(D/T)
+    public function curl_mls_parse($line) {
+        $d = explode(";",$line);
+        $fn=trim(array_pop($d)); //the last bit is the file name, which has no key
+        
+        $ret=array();
+        foreach($d as $v) {
+            list($k,$v)=explode("=",$v);
+            $ret[trim(strtolower($k))]=trim(strtolower($v));
+        }
+        
+        //split up perms, if supplied
+        if(isset($ret["perm"]))
+            $ret["perm"]=array_flip(str_split($ret["perm"]));
+        else
+            $ret["perm"]=array();
+        
+        //convert timestamps to unix timestamps
+        if(isset($ret["modify"]))
+            //Timestamp is UTC and may contain .sss to give sub-second precision, filter this out
+            $ret["modify"]=DateTime::createFromFormat("YmdHis",substr($ret["modify"],0,14),new DateTimeZone("UTC"))->getTimestamp();
+        else
+            $ret["modify"]=0;
+        if(isset($ret["create"]))
+            $ret["create"]=DateTime::createFromFormat("YmdHis",substr($ret["create"],0,14),new DateTimeZone("UTC"))->getTimestamp();
+        else
+            $ret["create"]=$ret["modify"];
+        
+        $ret["filename"]=$fn;
+        
+        return $ret;
+    }
+    
+    //callback for in-band data of MLST
+    //callback not anonymous because we need to transfer data out of this function using $this
     public function curl_mlst_cb($res,$str) {
         if($this->debug_raw)
             printf("curl_mlst_cb: got '%s'\n",$str);
@@ -383,30 +418,7 @@ Options specific to %1\$s:
         } else {
             if($this->debug_raw)
                 printf("Raw data: %s",print_r($this->curl_mlst_data,true));
-            $d = explode(";",$this->curl_mlst_data["data"][0]);
-            array_pop($d); //the last bit is the file name, which we already know
-            $ret=array();
-            foreach($d as $v) {
-                list($k,$v)=explode("=",$v);
-                $ret[trim(strtolower($k))]=trim(strtolower($v));
-            }
-            //split up perms, if supplied
-            if(isset($ret["perm"]))
-                $ret["perm"]=array_flip(str_split($ret["perm"]));
-            else
-                $ret["perm"]=array();
-            //convert timestamps to unix timestamps
-            if(isset($ret["modify"]))
-                //Timestamp is UTC and may contain .sss to give sub-second precision, filter this out
-                $ret["modify"]=DateTime::createFromFormat("YmdHis",substr($ret["modify"],0,14),new DateTimeZone("UTC"))->getTimestamp();
-            else
-                $ret["modify"]=0;
-            if(isset($ret["create"]))
-                $ret["create"]=DateTime::createFromFormat("YmdHis",substr($ret["create"],0,14),new DateTimeZone("UTC"))->getTimestamp();
-            else
-                $ret["create"]=$ret["modify"];
-            
-            return $ret;
+            $ret=$this->curl_mls_parse($this->curl_mlst_data["data"][0]);
         }
         
         curl_setopt_array($this->curl,array(CURLOPT_HEADERFUNCTION=>NULL));
@@ -455,31 +467,9 @@ Options specific to %1\$s:
             if($this->debug_raw)
                 printf("Raw data: '%s'\n",$v);
 
-            $d = explode(";",$v);
-            $fn=trim(array_pop($d)); //the last bit is the file name
+            $entry=$this->curl_mls_parse($v);
             
-            $entry=array();
-            foreach($d as $v) {
-                list($k,$v)=explode("=",$v);
-                $entry[trim(strtolower($k))]=trim(strtolower($v));
-            }
-            //split up perms, if supplied
-            if(isset($entry["perm"]))
-                $entry["perm"]=array_flip(str_split($entry["perm"]));
-            else
-                $entry["perm"]=array();
-            //convert timestamps to unix timestamps
-            if(isset($entry["modify"]))
-                //Timestamp is UTC and may contain .sss to give sub-second precision, filter this out
-                $entry["modify"]=DateTime::createFromFormat("YmdHis",substr($entry["modify"],0,14),new DateTimeZone("UTC"))->getTimestamp();
-            else
-                $entry["modify"]=0;
-            if(isset($entry["create"]))
-                $entry["create"]=DateTime::createFromFormat("YmdHis",substr($entry["create"],0,14),new DateTimeZone("UTC"))->getTimestamp();
-            else
-                $entry["create"]=$entry["modify"];
-            
-            $ret[$fn]=$entry;
+            $ret[$entry["filename"]]=$entry;
         }
         
         curl_setopt_array($this->curl,array(CURLOPT_HEADERFUNCTION=>NULL));
