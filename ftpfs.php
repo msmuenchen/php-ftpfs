@@ -618,9 +618,24 @@ Options specific to %1\$s:
         }
         return 0;
     }
-    public function mknod() {
-        printf("PHPFS: %s called\n", __FUNCTION__);
-        return -FUSE_ENOSYS;
+    public function mknod($path,$mode,$dev) {
+        printf("PHPFS: %s called, path '%s', mode '%o', dev '%d'\n", __FUNCTION__,$path,$mode,$dev);
+        
+        //check if the given endpoint already exists
+        $stat=$this->curl_mlst($path);
+        if($stat!=-FUSE_ENOENT) {
+            printf("mknod called on existing file %s\n",$path);
+            return -FUSE_EEXISTS;
+        }
+        $ret=$this->curl_put($path,0,"");
+        
+        //check if the given endpoint exists now
+        $stat=$this->curl_mlst($path);
+        if($stat==-FUSE_ENOENT) {
+            printf("mknod unable to create file %s\n",$path);
+            return -FUSE_EFAULT;
+        }
+        return 0;
     }
     public function mkdir() {
         printf("PHPFS: %s called\n", __FUNCTION__);
