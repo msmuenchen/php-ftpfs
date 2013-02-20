@@ -474,7 +474,44 @@ Options specific to %1\$s:
         
         return $ret;
     }
-    public function curl_put($path,$offset,$buf) {
+
+    //get $len bytes of data from a file starting at $offset
+    public function curl_get($path,$offset=0,$len=0) {
+        if(substr($path,0,1)=="/")
+            $path=substr($path,1);
+
+        $abspath=$this->base_url.$path;
+        
+        $begin=$offset;
+        $end=$begin+$len-1; //ranges are inclusive
+
+        $this->curl_reset();        
+        $ret=curl_setopt_array($this->curl,array(
+            CURLOPT_URL=>$abspath,
+            CURLOPT_RANGE=>"$begin-$end",
+        ));
+        if($ret===FALSE)
+            trigger_error(sprintf("cURL error: '%s'",curl_error($this->curl)),E_USER_ERROR);
+        
+        if($this->debug)
+            printf("Requesting cURL file from base '%s' / path '%s' / abspath '%s' / range %d-%d\n",$this->base_url,$path,$abspath,$begin,$end);
+        
+        $ret=curl_exec($this->curl);
+        
+        if($ret===FALSE) {
+            printf("cURL error: '%s'\n",curl_error($this->curl));
+            return -FUSE_EINVAL;
+        }
+        
+        if(strlen($ret)!=$len) {
+            printf("curl_get warning: for '%s': return length %d differs from specified length %d\n",$abspath,strlen($ret),$len);
+        }
+        
+        return $ret;
+    }
+
+    //write $buf at $offset to $path
+    public function curl_put($path,$offset=0,$buf="") {
         if(substr($path,0,1)=="/")
             $path=substr($path,1);
         
@@ -794,57 +831,57 @@ Options specific to %1\$s:
 //        printf("Handles are now: %s",print_r($this->handles,true));
         return $id;
     }
+    
+    //read up to $buf_len bytes from $path opened with $handle
     public function read($path,$handle,$offset,$buf_len,&$buf) {
-        printf("PHPFS: %s called, path '%s', handle '%d', offset '%d', buf_len '%d'\n", __FUNCTION__,$path,$handle,$offset,$buf_len);
+        printf("PHPFS: %s(path='%s', handle=%d, offset=%d, buf_len=%d) called\n", __FUNCTION__,$path,$handle,$offset,$buf_len);
+        
         //check if the handle is valid
         if(!isset($this->handles[$handle])) {
-            printf("Tried to read from invalid handle %d on file '%s'\n",$handle,$path);
+            printf("read('%s',%d): invalid handle\n",$path,$handle);
             return -FUSE_EBADF;
         }
+        
         //check if the handle is a read-handle
-        $handle=$this->handles[$handle];
-        if($handle["read"]===false) {
-            printf("Tried to read from no-read handle %d on file '%s'\n",$handle,$path);
+        $handle_data=$this->handles[$handle];
+        if($handle_data["read"]===false) {
+            printf("read('%s',%d): no-read handle\n",$path,$handle);
             return -FUSE_EBADF;
         }
 
-        if($path!=$handle["path"]) {
-            printf("Path '%s' differs from handle path '%s'\n",$path,$handle["path"]);
-            $path=$handle["path"];
+        //check if $path is the same as in the handle
+        if($path!=$handle_data["path"]) {
+            printf("read('%s',%d): path not equal to handle path '%s', restoring original\n",$path,$handle,$handle_data["path"]);
+            $path=$handle_data["path"];
         }
-        
-        $abspath=$this->base_url.$path;
         
         $begin=$offset;
         $end=$begin+$buf_len;
-        if($end>$handle["stat"]["size"]) {
-            printf("Truncating end from %d to %d for offset %d buflen %d\n",$end,$handle["stat"]["size"],$begin,$buf_len);
-            $end=$handle["stat"]["size"];
+        $ask_len=$buf_len;
+        if($end>$handle_data["stat"]["size"]) {
+            if($this->debug)
+                printf("read('%s',%d): truncating end from %d to %d for offset %d, buflen %d\n",$path,$handle,$end,$handle_data["stat"]["size"],$begin,$buf_len);
+            $end=$handle_data["stat"]["size"];
+            $ask_len=$end-$begin;
         }
-        $this->curl_reset();
         
-        $ret=curl_setopt_array($this->curl,array(
-            CURLOPT_URL=>$abspath,
-            CURLOPT_RANGE=>"$begin-$end",
-        ));
-        if($ret===FALSE)
-            trigger_error(sprintf("cURL error: '%s'",curl_error($this->curl)),E_USER_ERROR);
+        $ret=$this->curl_get($path,$begin,$ask_len);
         
-        if($this->debug)
-            printf("Requesting cURL file from base '%s' / path '%s' / abspath '%s' / range %d-%d\n",$this->base_url,$path,$abspath,$begin,$end);
+        if($ret===-FUSE_EINVAL) {
+            printf("read('%s',%d): curl_get reported error\n",$path,$handle);
+            return $ret;
+        }
         
-        $ret=curl_exec($this->curl);
-        
-        if($ret===FALSE) {
-            printf("cURL error: '%s'\n",curl_error($this->curl));
-            return -FUSE_EINVAL;
+        if(strlen($ret)!=$ask_len) {
+            printf("read('%s',%d): curl_get returned %d bytes while asked for %d bytes\n",$path,$handle,strlen($ret),$ask_len);
         }
         $buf=$ret;
         
         if($this->debug_raw)
-            printf("Returning '%s' (%d bytes)\n",$buf,strlen($buf));
-//        elseif($this->debug)
-            printf("Returning %d bytes\n",strlen($buf));
+            printf("read('%s',%d): returning '%s' (%d bytes)\n",$path,$handle,$buf,strlen($buf));
+        elseif($this->debug)
+            printf("read('%s',%d): returning %d bytes\n",$path,$handle,strlen($buf));
+        
         return strlen($buf);
     }
     public function write() {
