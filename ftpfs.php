@@ -1056,9 +1056,58 @@ Options specific to %1\$s:
         
         return strlen($buf);
     }
-    public function write() {
-        printf("PHPFS: %s called\n", __FUNCTION__);
-        return -FUSE_ENOSYS;
+
+    //write $buf to $path (opened with handle $handle) at $offset
+    public function write($path,$handle,$offset,$buf) {
+        if($this->debug)
+            printf("PHPFS: %s(path='%s', handle=%d, offset=%d, len(buf)=%d) called\n", __FUNCTION__,$path,$handle,$offset,strlen($buf));
+        if($this->debug_raw)
+            printf("write('%s',%d): raw input buffer: '%s'\n",$buf);
+
+        //check if the handle is valid
+        if(!isset($this->handles[$handle])) {
+            printf("write('%s',%d): invalid handle\n",$path,$handle);
+            return -FUSE_EBADF;
+        }
+        
+        //check if the handle is a read-handle
+        $handle_data=$this->handles[$handle];
+        if($handle_data["write"]===false) {
+            printf("write('%s',%d): no-write handle\n",$path,$handle);
+            return -FUSE_EBADF;
+        }
+
+        //check if $path is the same as in the handle
+        if($path!=$handle_data["path"]) {
+            printf("write('%s',%d): path not equal to handle path '%s', restoring original\n",$path,$handle,$handle_data["path"]);
+            $path=$handle_data["path"];
+        }
+        
+        //check if we're having an offset that places us in the middle of the file
+        $stat=$this->curl_mlst($path);
+        if($stat<0)
+            return $stat;
+        if($offset<$stat["size"]) {
+            printf("write('%s',%d): requested offset %d is smaller than file size %d\n",$path,$handle,$offset,$stat["size"]);
+            
+            //backup the old data
+            $old=$this->curl_get($path,0,$stat["size"]);
+            if($old<0)
+                return $old;
+            $pre=substr($old,0,$offset);
+            $post=substr($old,$offset+strlen($buf));
+            $new=$pre.$buf.$post;
+            //do separate curl_put, as changing $buf would mess up the return strlen($buf) below!
+            $ret=$this->curl_put($path,0,$new);
+        } else {
+            $ret=$this->curl_put($path,$offset,$buf);
+        }
+        if($ret<0)
+            return $ret;
+        
+        if($this->debug)
+            printf("write('%s',%d): return %d\n",$path,$handle,strlen($buf));
+        return strlen($buf);
     }
     public function statfs() {
         printf("PHPFS: %s called\n", __FUNCTION__);
