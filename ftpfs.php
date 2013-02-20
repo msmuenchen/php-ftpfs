@@ -288,7 +288,8 @@ Options specific to %1\$s:
             CURLOPT_INFILE=>NULL,
             CURLOPT_INFILESIZE=>0,
             CURLOPT_PUT=>false,
-            CURLOPT_RANGE=>""
+            CURLOPT_RANGE=>"",
+            CURLOPT_VERBOSE=>$this->debug_curl
         ));
         if($ret===FALSE)
             trigger_error(sprintf("cURL error: '%s'",curl_error($this->curl)),E_USER_ERROR);
