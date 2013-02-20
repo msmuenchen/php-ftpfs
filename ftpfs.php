@@ -618,35 +618,38 @@ Options specific to %1\$s:
         printf("PHPFS: %s called\n", __FUNCTION__);
         return -FUSE_ENOSYS;
     }
+    
+    //get the content of a directory
     public function getdir($path,&$ret) {
         if($this->debug)
-            printf("PHPFS: %s called, path '%s'\n", __FUNCTION__,$path);
+            printf("PHPFS: %s('%s') called\n", __FUNCTION__,$path);
         
+        //enforce directory as path
         if(substr($path,-1,1)!="/")
             $path.="/";
         
         //Check if the directory exists
         $dir=$this->curl_mlst($path);
         if($dir<0) {
-            printf("getdir: '%s' does not exist\n",$path);
+            printf("getdir('%s'): target does not exist\n",$path);
             return $dir;
         }
         
         $files=$this->curl_mlsd($path);
         if($files<0) {
-            printf("getdir: '%s' returned error %d\n",$files);
+            printf("getdir('%s'): MLSD returned error %d\n",$path,$files);
             return $files;
         }
         
         if(sizeof($files)<2) { //must always be at least two elements big (parent+current dir)
-            printf("getdir: '%s' has less than 2 elements\n",$path);
+            printf("getdir('%s'): MLSD returned less than 2 elements\n",$path);
             return -FUSE_EINVAL;
         }
         
         $ret=array();
         foreach($files as $fn=>$data) {
             if($this->debug)
-                printf("Adding file '%s' in '%s' to list\n",$fn,$path);
+                printf("getdir('%s'): Adding file '%s' to list\n",$path,$fn);
             if($data["type"]=="file")
                 $ret[$fn]=array("type"=>FUSE_DT_REG);
             elseif($data["type"]=="dir" || $data["type"]=="cdir" || $data["type"]=="pdir")
@@ -654,6 +657,10 @@ Options specific to %1\$s:
             else
                 printf("Unknown type '%s' for file '%s' in path '%s'\n",$data["type"],$fn,$path);
         }
+        
+        if($this->debug)
+            printf("getdir('%s'): returning %d elements\n",$path,sizeof($ret));
+        
         return 0;
     }
     public function mknod($path,$mode,$dev) {
