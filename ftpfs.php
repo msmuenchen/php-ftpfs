@@ -963,16 +963,24 @@ Options specific to %1\$s:
         $want_read=false;
         $want_write=false;
         
-        if(($mode & FUSE_O_RDONLY)==FUSE_O_RDONLY) {
-            $want_read=true;
-        }
-        if(($mode & FUSE_O_WRONLY)==FUSE_O_WRONLY) {
-            $want_read=false;
-            $want_write=true;
-        }
-        if(($mode & FUSE_O_RDWR)==FUSE_O_RDWR) {
-            $want_read=true;
-            $want_write=true;
+        //see man 2 open, section "Notes" for an explanation of this code...
+        $fm=($mode & FUSE_O_ACCMODE);
+        
+        switch($fm) {
+            case FUSE_O_RDONLY:
+                $want_read=true;
+                break;
+            case FUSE_O_WRONLY:
+                $want_write=true;
+                break;
+            case FUSE_O_RDWR:
+                $want_read=true;
+                $want_write=true;
+                break;
+            default:
+                printf("open('%s'): invalid file access mode %d\n",$path,$fm);
+                return -FUSE_EINVAL;
+                break;
         }
         
         if($this->debug)
