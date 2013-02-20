@@ -478,6 +478,47 @@ Options specific to %1\$s:
         curl_setopt_array($this->curl,array(CURLOPT_HEADERFUNCTION=>NULL));
         return $ret;
     }
+    public function curl_put($path,$offset,$buf) {
+        if(substr($path,0,1)=="/")
+            $path=substr($path,1);
+        
+        $abspath=$this->base_url.$path;
+
+        //write buffer to tempfile
+        $tmp=tmpfile();
+        if($tmp===false) {
+            printf("tmpfile failed\n");
+            return -FUSE_EINVAL;
+        }
+        fwrite($tmp,$buf);
+        fseek($tmp,0);
+        
+        $this->curl_reset();
+        
+        $ret=curl_setopt_array($this->curl,array(
+            CURLOPT_URL=>$abspath,
+            CURLOPT_RESUME_FROM=>$offset,
+            CURLOPT_INFILE=>$tmp,
+            CURLOPT_INFILESIZE=>strlen($buf),
+            CURLOPT_PUT=>true,
+        ));
+        if($ret===FALSE)
+            trigger_error(sprintf("cURL error: '%s'",curl_error($this->curl)),E_USER_ERROR);
+        
+        if($this->debug)
+            printf("Requesting cURL PUT to base '%s' / path '%s' / abspath '%s' for %d bytes at offset %d\n",$this->base_url,$path,$abspath,strlen($buf),$offset);
+        
+        $ret=curl_exec($this->curl);
+        
+        if($ret===FALSE) {
+            printf("cURL error: '%s'\n",curl_error($this->curl));
+            return -FUSE_EINVAL;
+        }
+        
+        fclose($tmp);
+        
+        return 0;
+    }
     
     public function getattr($path, &$st) {
         if($this->debug)
