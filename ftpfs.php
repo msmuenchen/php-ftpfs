@@ -166,9 +166,10 @@ class PHPFTPFS extends Fuse {
             $this->curl=curl_init($this->base_url);
             $this->curl_feat=$this->curl_feat();
             //Check if all required feats are supported
-            if(!isset($this->curl_feat["mlst"])) //TODO: Actually fall back to LIST :D
+            if(!isset($this->curl_feat["mlst"])) { //TODO: Actually fall back to LIST :D
                 printf("WARNING: MLST not supported. Falling back to broken LIST instead, you can expect access problems!\n");
-            else {
+                exit;
+            } else {
                 if($this->debug)
                     printf("Server supports MLS(D/T)\n");
             }
