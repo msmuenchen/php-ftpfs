@@ -762,7 +762,7 @@ Options specific to %1\$s:
             $path=substr($path,1);
         $abspath=$this->remotedir.$path;
         
-        return $this->curl_inband_cmd("MKD $abspath","257");
+        return $this->curl_inband_cmd("MKD $abspath","","257");
     }
 
     //delete a directory
