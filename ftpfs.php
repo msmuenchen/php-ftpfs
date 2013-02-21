@@ -103,16 +103,30 @@ class PHPFTPFS extends Fuse {
             }
 
             //Assemble the URL
-            if($this->ipv6) {
-                $d=dns_get_record($this->host,DNS_AAAA);
-            } else {
-                $d=dns_get_record($this->host,DNS_A);
-            }
-            if($d===FALSE)
-                trigger_error(sprintf("Host %s not found",$this->host),E_USER_ERROR);
-            $d=$d[0];
+            if(filter_var($this->host,FILTER_VALIDATE_IP)===FALSE) {
+                if($this->ipv6) {
+                    $d=dns_get_record($this->host,DNS_AAAA);
+                } else {
+                    $d=dns_get_record($this->host,DNS_A);
+                }
+                if($d===FALSE)
+                    trigger_error(sprintf("Host %s not found",$this->host),E_USER_ERROR);
+                $d=$d[0];
 
-            $ip=($this->ipv6) ? "[".$d["ipv6"]."]" : $d["ip"];
+                $ip=($this->ipv6) ? "[".$d["ipv6"]."]" : $d["ip"];
+            } else {
+                $is_v6=filter_var($this->host,FILTER_VALIDATE_IP,FILTER_FLAG_IPV6);
+                $is_v4=filter_var($this->host,FILTER_VALIDATE_IP,FILTER_FLAG_IPV4);
+                
+                if($is_v6 && !$this->ipv6) {
+                    printf("Supplied IP '%s' is IPv6, but IPv6 was not enabled (use -o ipv6)\n",$this->host);
+                    exit(1);
+                } elseif($is_v4 && $this->ipv6) {
+                    printf("Supplied IP '%s' is IPv4, but IPv6 was enabled\n",$this->host);
+                    exit(1);
+                }
+                $ip=($this->ipv6) ? "[".$this->host."]" : $this->host;
+            }
             
             $this->base_url=sprintf("ftp://%s:%s@%s:%d%s",urlencode($this->user),urlencode($this->pass),$ip,$this->controlport,$this->remotedir);
             
