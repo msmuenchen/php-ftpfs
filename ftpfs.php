@@ -668,11 +668,11 @@ Options specific to %1\$s:
 
         $abspath=$this->base_url.$path;
         
-        if($this->debug)
-            printf("Requesting cURL file from base '%s' / path '%s' / abspath '%s' / range %d-%d\n",$this->base_url,$path,$abspath,$begin,$end);
-
         $begin=$offset;
         $end=$begin+$len-1; //ranges are inclusive
+
+        if($this->debug)
+            printf("Requesting cURL file from base '%s' / path '%s' / abspath '%s' / range %d-%d\n",$this->base_url,$path,$abspath,$begin,$end);
 
         $ret=$this->curl_setopt(array(
             CURLOPT_URL=>$abspath,
@@ -982,7 +982,7 @@ Options specific to %1\$s:
 
     //remove a directory
     public function rmdir($path) {
-        printf("PHPFS: %s(path='%s') called\n", __FUNCTION__);
+        printf("PHPFS: %s(path='%s') called\n", __FUNCTION__,$path);
 
         //check if the directory exists
         $stat=$this->curl_mlst($path);
