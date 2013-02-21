@@ -628,6 +628,18 @@ Options specific to %1\$s:
         
         return $this->curl_inband_cmd("MKD $abspath","257");
     }
+
+    //delete a directory
+    public function curl_rmdir($path) {
+        if($this->debug)
+            printf("Requesting cURL RMDIR to base '%s' / path '%s'\n",$this->base_url,$path);
+        
+        if(substr($path,0,1)=="/")
+            $path=substr($path,1);
+        $abspath=$this->remotedir.$path;
+        
+        return $this->curl_inband_cmd("RMD $abspath");
+    }
     
     //FUSE: get attributes of a file
     public function getattr($path, &$st) {
@@ -831,9 +843,44 @@ Options specific to %1\$s:
             printf("unlink('%s'): return 0\n",$path);
         return 0;
     }
-    public function rmdir() {
-        printf("PHPFS: %s called\n", __FUNCTION__);
-        return -FUSE_ENOSYS;
+
+    //remove a directory
+    public function rmdir($path) {
+        printf("PHPFS: %s(path='%s') called\n", __FUNCTION__);
+
+        //check if the directory exists
+        $stat=$this->curl_mlst($path);
+        if($stat<0)
+            return $stat;
+        
+        if(!isset($stat["perm"]["d"])) {
+            printf("rmdir('%s'): DELE permission not set\n",$path);
+            return -FUSE_EACCES;
+        }
+        
+        if($stat["type"]!="dir") {
+            printf("rmdir('%s'): not a directory\n",$path);
+        }
+
+        //delete the directory
+        $ret=$this->curl_rmdir($path);
+        if($ret<0)
+            return $ret;
+
+        //check if the directory doesn't exist
+        $stat=$this->curl_mlst($path);
+        if($stat<0 && $stat!==-FUSE_ENOENT)
+            return $stat;
+        elseif($stat===-FUSE_ENOENT) {
+            //Do nothing, all ok
+        } else {
+            printf("rmdir('%s'): directory still exists after RMDIR\n",$path);
+            return -FUSE_EIO;
+        }
+        
+        if($this->debug)
+            printf("rmdir('%s'): return 0\n",$path);
+        return 0;
     }
     
     //create a symlink
