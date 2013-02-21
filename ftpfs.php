@@ -364,7 +364,8 @@ Options specific to %1\$s:
         $st=substr($str,3,1);
         $d=&$this->curl_inband_data; //save typing :D
         $cc=$d["cmds"][$d["current_cmd"]];
-        printf("will accept %s, rc %s st %s\n",$cc[2],$rc,$st);
+        if($this->debug)
+            printf("will accept %s, rc %s st %s\n",$cc[2],$rc,$st);
         //States:
         //0 - waiting for 215 SYST reply (SYST is automatically inserted by curl_inband_cb)
         //    if rc is not 215, continue
@@ -421,7 +422,7 @@ Options specific to %1\$s:
     //      that cURL doesn't run SYST on connects in the future and use its unique 215 to establish a clean
     //      state.
     public function curl_inband_cmd($cmd,$expect_errorcode="",$expect_okcode="250") {
-//        if($this->debug)
+        if($this->debug)
             printf("%s(cmd='%s', expect_ec=%s, expect_ok=%s) called\n",__FUNCTION__,compact_pa($cmd),$expect_errorcode,$expect_okcode);
 
         if(!is_array($cmd))
@@ -930,6 +931,7 @@ Options specific to %1\$s:
         $ret=$this->curl_mkdir($path);
         if($ret<0)
             return $ret;
+
         //TODO: chmod
         
         //check if the given endpoint exists now
