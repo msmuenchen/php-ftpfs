@@ -148,18 +148,14 @@ class PHPFTPFS extends Fuse {
             //Open (and test) cURL connection
             printf("Opening connection to %s\n",$this->base_url);
             $this->curl=curl_init($this->base_url);
-            if($this->debug_curl) {
-                $ret=curl_setopt($this->curl,CURLOPT_VERBOSE,true);
-                if($ret===FALSE)
-                    trigger_error(sprintf("cURL error: '%s'",curl_error($this->curl)),E_USER_ERROR);
+            $this->curl_feat=$this->curl_feat();
+            //Check if all required feats are supported
+            if(!isset($this->curl_feat["mlst"])) //TODO: Actually fall back to LIST :D
+                printf("WARNING: MLST not supported. Falling back to broken LIST instead, you can expect access problems!\n");
+            else {
+                if($this->debug)
+                    printf("Server supports MLS(D/T)\n");
             }
-            $ret=curl_setopt_array($this->curl,array(CURLOPT_RETURNTRANSFER=>true,CURLOPT_BINARYTRANSFER=>true));
-            if($ret===FALSE)
-                trigger_error(sprintf("cURL error: '%s'",curl_error($this->curl)),E_USER_ERROR);
-            
-            $ret=curl_exec($this->curl);
-            if($ret===FALSE)
-                trigger_error(sprintf("cURL error: '%s'",curl_error($this->curl)),E_USER_ERROR);
         }            
         
         if($this->run_fuse) {
@@ -316,7 +312,7 @@ Options specific to %1\$s:
     //callback not anonymous because we need to transfer data out of this function using $this
     public function curl_inband_cb($res,$str) {
         if($this->debug_raw)
-            printf("curl_inband_cb: state %d, got '%s'\n",$this->curl_inband_data["state"],$str);
+            printf("curl_inband_cb: state %d, got '%s', expecting %s as OK\n",$this->curl_inband_data["state"],$str,$this->curl_inband_data["expect_okcode"]);
         elseif($this->debug)
             printf("curl_inband_cb: state %d\n",$this->curl_inband_data["state"]);
         
@@ -329,10 +325,10 @@ Options specific to %1\$s:
             break;
             case 1: //have seen a 215 OK from SYST, waiting for 250 OK
                 //250 OK but with continuation data (which we have to catch)
-                if(substr($str,0,4)=="250-") {
+                if(substr($str,0,4)==$this->curl_inband_data["expect_okcode"]."-") {
                     $this->curl_inband_data["state"]=2;
                     break;
-                } elseif(substr($str,0,4)=="250 ") {
+                } elseif(substr($str,0,4)==$this->curl_inband_data["expect_okcode"]." ") {
                     curl_setopt_array($res,array(CURLOPT_HEADERFUNCTION=>NULL));
                     $this->curl_inband_data["state"]=4;
                     break;
@@ -344,8 +340,8 @@ Options specific to %1\$s:
                     break;
                 }
             break;
-            case 2: //either the actual communication data or a 250- saying "end of data"
-                if(substr($str,0,4)=="250 ") {
+            case 2: //either the actual communication data or a "250 " saying "end of data"
+                if(substr($str,0,4)==$this->curl_inband_data["expect_okcode"]." ") {
                     curl_setopt_array($res,array(CURLOPT_HEADERFUNCTION=>NULL));
                     $this->curl_inband_data["state"]=4;
                     break;
@@ -366,11 +362,11 @@ Options specific to %1\$s:
     //      and so will see the "220 Ok login now" message as start message for the parsing. So, we hope
     //      that cURL doesn't run SYST on connects in the future and use its unique 215 to establish a clean
     //      state.
-    public function curl_inband_cmd($cmd,$expect_errorcode="") {
+    public function curl_inband_cmd($cmd,$expect_errorcode="",$expect_okcode="250") {
         if($this->debug)
-            printf("%s(cmd='%s', expect_ec=%s) called\n",__FUNCTION__,$cmd,$expect_errorcode);
+            printf("%s(cmd='%s', expect_ec=%s, expect_ok=%s) called\n",__FUNCTION__,$cmd,$expect_errorcode,$expect_okcode);
 
-        $this->curl_inband_data=array("state"=>0,"data"=>array());
+        $this->curl_inband_data=array("state"=>0,"data"=>array(),"expect_okcode"=>$expect_okcode);
         
         $ret=$this->curl_setopt(array(
             CURLOPT_URL=>$this->base_url,
@@ -425,6 +421,36 @@ Options specific to %1\$s:
         return $ret;
     }
 
+    //return an array with the features reported by the server
+    public function curl_feat() {
+        if($this->debug)
+            printf("%s() called\n",__FUNCTION__);
+        
+        $ret=$this->curl_inband_cmd("FEAT","","211"); //FEAT returns 211 instead of 250
+        if($ret<0)
+            return -FUSE_EIO;
+        
+        $data=$this->curl_inband_data["data"];
+        $ret=array();
+        foreach($data as $f) {
+            $f=explode(" ",strtolower(trim($f)),2);
+            $feat=trim($f[0]);
+            if(isset($f[1])) {
+                $opt_a=explode(";",trim($f[1]));
+                $opt=array();
+                foreach($opt_a as $k=>$v) {
+                    if(trim($v)=="") continue;
+                    if(substr($v,-1,1)=="*") //currently activated
+                        $opt[substr($v,0,-1)]=true;
+                    else
+                        $opt[$v]=false;
+                }
+            } else
+                $opt="";
+            $ret[$feat]=$opt;
+        }
+        return $ret;
+    }
 
     //parse a line returned by MLS(D/T)
     public function curl_mls_parse($line) {
@@ -470,6 +496,16 @@ Options specific to %1\$s:
         if($this->debug)
             printf("Requesting cURL MLST from base '%s' / path '%s' / abspath '%s'\n",$this->base_url,$path,$abspath);
         
+        //Enable all MLST fields
+        $estr="";
+        foreach($this->curl_feat["mlst"] as $opt=>$active)
+            $estr.=$opt.";";
+        if($this->debug)
+            printf("Enabling MLST options '%s'\n",$estr);
+        $ret=$this->curl_inband_cmd("OPTS MLST $estr","",200);
+        if($ret<0)
+            return -FUSE_EIO;
+        
         $ret=$this->curl_inband_cmd("MLST $abspath","550");
         
         if($ret<0) {
@@ -500,6 +536,16 @@ Options specific to %1\$s:
 
         if($this->debug)
             printf("Requesting cURL MLSD from base '%s' / path '%s' / abspath '%s'\n",$this->base_url,$path,$abspath);
+        
+        //Enable all MLST fields
+        $estr="";
+        foreach($this->curl_feat["mlst"] as $opt=>$active)
+            $estr.=$opt.";";
+        if($this->debug)
+            printf("Enabling MLST options '%s'\n",$estr);
+        $ret=$this->curl_inband_cmd("OPTS MLST $estr","",200);
+        if($ret<0)
+            return -FUSE_EIO;
         
         $ret=$this->curl_outband_cmd($abspath,"MLSD");
         if($ret<0)
