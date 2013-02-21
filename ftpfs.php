@@ -50,7 +50,8 @@ class PHPFTPFS extends Fuse {
             "KEY_CACHEDIR",
             "KEY_DEBUG_CURL",
             "KEY_DEBUG_RAW",
-            "KEY_DEBUG_USER"
+            "KEY_DEBUG_USER",
+            "KEY_URL"
         ));
         $this->opts     = array(
             "--help" => $this->opt_keys["KEY_HELP"],
@@ -70,7 +71,8 @@ class PHPFTPFS extends Fuse {
             "cachedir " => $this->opt_keys["KEY_CACHEDIR"],
             "debug_curl" => $this->opt_keys["KEY_DEBUG_CURL"],
             "debug_raw" => $this->opt_keys["KEY_DEBUG_RAW"],
-            "debug_user" => $this->opt_keys["KEY_DEBUG_USER"]
+            "debug_user" => $this->opt_keys["KEY_DEBUG_USER"],
+            "ftp_url " => $this->opt_keys["KEY_URL"]
         );
         $this->userdata = array();
     }
@@ -170,6 +172,8 @@ class PHPFTPFS extends Fuse {
             $this->fuse_main($argc, $argv);
         }
     }
+    
+
     public function opt_proc(&$data, $arg, $key, &$argc, &$argv) {
         // return -1 to indicate error, 0 to accept parameter,1 to retain parameter and pase to FUSE
         switch ($key) {
@@ -203,6 +207,8 @@ Options specific to %1\$s:
     -o ftp_host=s             Hostname or IP of remote host, default 'localhost'
     -o ftp_user=s             Remote user name, default 'anonymous'
     -o ftp_password=s         Password of remote user, default 'user@example.com'
+    -o ftp_url=s              Specify host/user/password with a ftp url; warning:
+                              remotedir MUST be specified separately!
     -o cache_maxage=n         Maximum age of cached files in seconds, default 60
     -o pasv                   Use PASV FTP mode instead of active transfer mode
     -o controlport=n          Control port of FTP server, default 21
@@ -281,7 +287,30 @@ Options specific to %1\$s:
                 $this->cache_maxage=(int)substr($arg,13);
                 return 0;
                 break;
-            
+            case $this->opt_keys["KEY_URL"]:
+                $arg=substr($arg,8);
+                printf("got url '%s'\n",$arg);
+                //tokenize the url
+                $url=parse_url($arg);
+                if(strtolower($url["scheme"])!="ftp") {
+                    printf("Error: not a FTP URL\n");
+                    return -1;
+                }
+                if(isset($url["host"]))
+                    $this->host=urldecode($url["host"]);
+                if(isset($url["user"]))
+                    $this->user=urldecode($url["user"]);
+                if(isset($url["pass"]))
+                    $this->pass=urldecode($url["pass"]);
+                if(isset($url["path"])) {
+                    $this->remotedir=urldecode($url["path"]);
+                    if(substr($this->remotedir,0,1)!="/")
+                        $this->remotedir="/".$this->remotedir;
+                    if(substr($this->remotedir,-1,1)!="/")
+                        $this->remotedir.="/";
+                }
+                return 0;
+                break;
             default:
                 return 1;
         }
