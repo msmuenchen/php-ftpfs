@@ -291,9 +291,9 @@ Options specific to %1\$s:
         }
     }
     
-    //reset all the stuff used in the various curl requests
-    public function curl_reset() {
-        $ret=curl_setopt_array($this->curl,array(
+    //set the specifiec curl options, and reset the others to default
+    public function curl_setopt($a) {
+        $defaults=array(
             CURLOPT_RETURNTRANSFER=>true,
             CURLOPT_BINARYTRANSFER=>true,
             CURLOPT_QUOTE=>array(),
@@ -306,12 +306,126 @@ Options specific to %1\$s:
             CURLOPT_PUT=>false,
             CURLOPT_RANGE=>"",
             CURLOPT_VERBOSE=>$this->debug_curl
-        ));
-        if($ret===FALSE)
-            trigger_error(sprintf("cURL error: '%s'",curl_error($this->curl)),E_USER_ERROR);
-        
+        );
+        foreach($a as $opt=>$val)
+            $defaults[$opt]=$val;
+        return curl_setopt_array($this->curl,$defaults);
     }
-    
+
+    //callback for in-band communication
+    //callback not anonymous because we need to transfer data out of this function using $this
+    public function curl_inband_cb($res,$str) {
+        if($this->debug_raw)
+            printf("curl_inband_cb: state %d, got '%s'\n",$str);
+        elseif($this->debug)
+            printf("curl_inband_cb: state %d\n",$this->curl_inband_data["state"]);
+        
+        switch($this->curl_inband_data["state"]) {
+            case 0: //didn't see a 215 from the SYST, wait for it
+                if(substr($str,0,4)!="215 ") {
+                    break;
+                }
+                $this->curl_inband_data["state"]=1;
+            break;
+            case 1: //have seen a 215 OK from SYST, waiting for 250 OK
+                //250 OK but with continuation data (which we have to catch)
+                if(substr($str,0,4)=="250-") {
+                    $this->curl_inband_data["state"]=2;
+                    break;
+                } elseif(substr($str,0,4)=="250 ") {
+                    curl_setopt_array($res,array(CURLOPT_HEADERFUNCTION=>NULL));
+                    $this->curl_inband_data["state"]=4;
+                    break;
+                } else {
+                    //prevent further processing
+                    curl_setopt_array($res,array(CURLOPT_HEADERFUNCTION=>NULL));
+                    $this->curl_inband_data["state"]=FALSE;
+                    $this->curl_inband_data["error"]=$str;
+                    break;
+                }
+            break;
+            case 2: //either the actual communication data or a 250- saying "end of data"
+                if(substr($str,0,4)=="250 ") {
+                    curl_setopt_array($res,array(CURLOPT_HEADERFUNCTION=>NULL));
+                    $this->curl_inband_data["state"]=4;
+                    break;
+                }
+                $this->curl_inband_data["data"][]=$str;
+            break;
+            
+        }
+        if($this->debug)
+            printf("curl_inband_cb: leave, state now %d\n",$this->curl_inband_data["state"]);
+        return strlen($str);
+    }
+    //run a in-band CURL command. On success, return 0; on failure, return -FUSE_EIO and the error in
+    //$this->curl_inband_data["error"]
+    //If the FTP error code does not match $expect_errorcode, then it will be printed out
+    //Else -FUSE_EINVAL is returned
+    //TODO: If the connection gets reset, the callback has no information about the state of the connection
+    //      and so will see the "220 Ok login now" message as start message for the parsing. So, we hope
+    //      that cURL doesn't run SYST on connects in the future and use its unique 215 to establish a clean
+    //      state.
+    public function curl_inband_cmd($cmd,$expect_errorcode="") {
+        if($this->debug)
+            printf("%s(cmd='%s', expect_ec=%s) called\n",__FUNCTION__,$cmd,$expect_errorcode);
+
+        $this->curl_inband_data=array("state"=>0,"data"=>array());
+        
+        $ret=$this->curl_setopt(array(
+            CURLOPT_URL=>$this->base_url,
+            CURLOPT_QUOTE=>array("SYST",$cmd),
+            CURLOPT_HEADERFUNCTION=>array($this,"curl_inband_cb"),
+            CURLOPT_NOBODY=>true
+        ));
+        if($ret===FALSE) {
+            printf("curl_inband_cmd('%s'): curl_setopt failed with '%s'\n",$cmd,curl_error($this->curl));
+            return -FUSE_EIO;
+        }
+        
+        $ret=curl_exec($this->curl);
+        if($ret===FALSE && $this->curl_inband_data["state"]!==FALSE) {
+            printf("curl_inband_cmd('%s'): unexpected error '%s'\n",$cmd,curl_error($this->curl));
+            return -FUSE_EIO;
+        } elseif($this->curl_inband_data["state"]===FALSE) {
+            $ec=substr($this->curl_inband_data["error"],0,3);
+            if($ec==$expect_errorcode) {
+                if($this->debug)
+                    printf("curl_inband_cmd('%s'): expected error '%s'\n",$cmd,$this->curl_inband_data["error"]);
+                return -FUSE_EINVAL;
+            } else {
+                printf("curl_inband_cmd('%s'): unexpected error '%s'\n",$cmd,$this->curl_inband_data["error"]);
+                return -FUSE_EIO;
+            }
+        }
+        
+        return 0;
+    }
+
+    //run a out-of-band CURL command. On success, return 0; on failure, return -FUSE_EIO
+    public function curl_outband_cmd($url,$cmd) {
+        if($this->debug)
+            printf("%s(url='%s', cmd=%s) called\n",__FUNCTION__,$url,$cmd);
+
+        $ret=$this->curl_setopt(array(
+            CURLOPT_URL=>$url,
+            CURLOPT_CUSTOMREQUEST=>$cmd
+        ));
+        if($ret===FALSE) {
+            printf("curl_outband_cmd('%s'): curl_setopt failed with '%s'\n",$cmd,curl_error($this->curl));
+            return -FUSE_EIO;
+        }
+        
+        $ret=curl_exec($this->curl);
+        if($ret===FALSE) {
+            printf("curl_outband_cmd('%s'): curl_exec failed with '%s'\n",$cmd,curl_error($this->curl));
+            return -FUSE_EIO;
+        }
+        
+        return $ret;
+    }
+
+
     //parse a line returned by MLS(D/T)
     public function curl_mls_parse($line) {
         $d = explode(";",$line);
@@ -345,98 +459,28 @@ Options specific to %1\$s:
         return $ret;
     }
     
-    //callback for in-band data of MLST
-    //callback not anonymous because we need to transfer data out of this function using $this
-    public function curl_mlst_cb($res,$str) {
-        if($this->debug_raw)
-            printf("curl_mlst_cb: got '%s'\n",$str);
-        
-        switch($this->curl_mlst_data["state"]) {
-            case 0: //didn't see a 215 from the SYST, wait for it
-                if(substr($str,0,4)!="215 ") {
-                    break;
-                }
-                $this->curl_mlst_data["state"]=1;
-            break;
-            case 1: //have seen a 250 OK from CWD, waiting for 250-Begin from MLST
-                if(substr($str,0,4)!="250-") {
-                    //prevent further processing
-                    curl_setopt_array($res,array(CURLOPT_HEADERFUNCTION=>NULL));
-                    $this->curl_mlst_data["state"]=FALSE;
-                    $this->curl_mlst_data["error"]=$str;
-                    break;
-                }
-                $this->curl_mlst_data["state"]=2;
-            break;
-            case 2: //have seen the 250- from MLST, now everything that does NOT begin with 250 is data from MLST
-                if(substr($str,0,3)=="250") {
-                    curl_setopt_array($res,array(CURLOPT_HEADERFUNCTION=>NULL));
-                    $this->curl_mlst_data["state"]="OK";
-                    break;
-                }
-                $this->curl_mlst_data["data"][]=$str;
-            break;
-        }
-        return strlen($str);
-    }
-    
+
     //MLST: get information about a specific file or directory (stat() equivalent)
-    //TODO: If the connection gets reset, the callback has no information about the state of the connection
-    //      and so will see the "220 Ok login now" message as start message for the parsing. So, we hope
-    //      that cURL doesn't run SYST on connects in the future and use its unique 215 to establish a clean
-    //      state.
     // See also: RFC 3659 @ http://www.ietf.org/rfc/rfc3659.txt
     public function curl_mlst($path) {
         if(substr($path,0,1)=="/")
             $path=substr($path,1);
         $abspath=$this->remotedir.$path;
 
-        $this->curl_mlst_data=array("state"=>0,"data"=>array());
-        
-        $this->curl_reset();
-        
-        $ret=curl_setopt_array($this->curl,array(
-            CURLOPT_URL=>$this->base_url,
-            CURLOPT_QUOTE=>array("SYST","MLST $abspath"),
-            CURLOPT_NOBODY=>true,
-            CURLOPT_HEADERFUNCTION=>array($this,"curl_mlst_cb"),
-        ));
-        if($ret===FALSE)
-            trigger_error(sprintf("cURL error: '%s'",curl_error($this->curl)),E_USER_ERROR);
-        
         if($this->debug)
             printf("Requesting cURL MLST from base '%s' / path '%s' / abspath '%s'\n",$this->base_url,$path,$abspath);
         
-        $ret=curl_exec($this->curl);
+        $ret=$this->curl_inband_cmd("MLST $abspath","550");
         
-        //if curl_mlst_data["state"] is FALSE, then no need to print also the curl error
-        if($ret===FALSE && $this->curl_mlst_data["state"]!==FALSE)
-            printf("cURL error: '%s'\n",curl_error($this->curl));
-        
-        if($this->curl_mlst_data["state"]===FALSE) {
-            $ec=substr($this->curl_mlst_data["error"],0,3);
-            if($this->debug)
-                printf("MLST errorcode is %s\n",$ec);
-            switch($ec) {
-                case "550": //Requested action not taken. File unavailable (e.g., file not found, no access).
-                    $ret = -FUSE_ENOENT;
-                break;
-                case "530": //Not logged in.
-                case "350": //Requested file action pending further information
-                case "332": //Need account for login.
-                    $ret = -FUSE_EACCES;
-                break;
-                default: //most likely a link error...
-                    $ret = -FUSE_EBADF;
-            }
+        if($ret<0) {
+            if($ret==-FUSE_EINVAL) //EINVAL=matched expected ec, other=unexpected error
+                return -FUSE_ENOENT; //MLST 550 = file not found / no access
+            return $ret;
         } else {
             if($this->debug_raw)
-                printf("Raw data: %s",print_r($this->curl_mlst_data,true));
-            $ret=$this->curl_mls_parse($this->curl_mlst_data["data"][0]);
+                printf("Raw data: %s",print_r($this->curl_inband_data,true));
+            $ret=$this->curl_mls_parse($this->curl_inband_data["data"][0]);
         }
-        
-        //free up memory
-        $this->curl_mlst_data=array();
         
         if($this->debug)
             printf("MLST result: '%s'\n",compact_pa($ret));
@@ -452,26 +496,14 @@ Options specific to %1\$s:
         if(substr($path,0,1)=="/")
             $path=substr($path,1);
     
-        $abspath=$this->base_url.$path;
-
-        $this->curl_reset();
-        
-        $ret=curl_setopt_array($this->curl,array(
-            CURLOPT_URL=>$abspath,
-            CURLOPT_CUSTOMREQUEST=>"MLSD",
-        ));
-        if($ret===FALSE)
-            trigger_error(sprintf("cURL error: '%s'",curl_error($this->curl)),E_USER_ERROR);
-        
         if($this->debug)
             printf("Requesting cURL MLSD from base '%s' / path '%s' / abspath '%s'\n",$this->base_url,$path,$abspath);
+
+        $abspath=$this->base_url.$path;
         
-        $ret=curl_exec($this->curl);
-        
-        if($ret===FALSE) {
-            printf("cURL error: '%s'\n",curl_error($this->curl));
-            return -FUSE_EINVAL;
-        }
+        $ret=$this->curl_outband_cmd($abspath,"MLSD");
+        if($ret<0)
+            return $ret;
         
         //normalize linebreaks
         $ret=str_replace("\r","\n",$ret);
@@ -500,26 +532,26 @@ Options specific to %1\$s:
 
         $abspath=$this->base_url.$path;
         
+        if($this->debug)
+            printf("Requesting cURL file from base '%s' / path '%s' / abspath '%s' / range %d-%d\n",$this->base_url,$path,$abspath,$begin,$end);
+
         $begin=$offset;
         $end=$begin+$len-1; //ranges are inclusive
 
-        $this->curl_reset();        
-        $ret=curl_setopt_array($this->curl,array(
+        $ret=$this->curl_setopt(array(
             CURLOPT_URL=>$abspath,
             CURLOPT_RANGE=>"$begin-$end",
         ));
-        if($ret===FALSE)
-            trigger_error(sprintf("cURL error: '%s'",curl_error($this->curl)),E_USER_ERROR);
-        
-        if($this->debug)
-            printf("Requesting cURL file from base '%s' / path '%s' / abspath '%s' / range %d-%d\n",$this->base_url,$path,$abspath,$begin,$end);
+        if($ret===FALSE) {
+            printf("curl_get('%s'): curl_setopt failed with '%s'\n",$path,curl_error($this->curl));
+            return -FUSE_EIO;
+        }
         
         $ret=curl_exec($this->curl);
-        
         if($ret===FALSE) {
-            printf("cURL error: '%s'\n",curl_error($this->curl));
-            return -FUSE_EINVAL;
-        }
+            printf("curl_get('%s'): curl_exec failed with '%s'\n",$path,curl_error($this->curl));
+            return -FUSE_EIO;
+        }        
         
         if(strlen($ret)!=$len) {
             printf("curl_get warning: for '%s': return length %d differs from specified length %d\n",$abspath,strlen($ret),$len);
@@ -535,6 +567,9 @@ Options specific to %1\$s:
         
         $abspath=$this->base_url.$path;
 
+        if($this->debug)
+            printf("Requesting cURL PUT to base '%s' / path '%s' / abspath '%s' for %d bytes at offset %d\n",$this->base_url,$path,$abspath,strlen($buf),$offset);
+
         //write buffer to tempfile
         $tmp=tmpfile();
         if($tmp===false) {
@@ -544,27 +579,24 @@ Options specific to %1\$s:
         fwrite($tmp,$buf);
         fseek($tmp,0);
         
-        $this->curl_reset();
-        
-        $ret=curl_setopt_array($this->curl,array(
+        $ret=$this->curl_setopt(array(
             CURLOPT_URL=>$abspath,
             CURLOPT_RESUME_FROM=>$offset,
             CURLOPT_INFILE=>$tmp,
             CURLOPT_INFILESIZE=>$offset+strlen($buf),
             CURLOPT_PUT=>true
         ));
-        if($ret===FALSE)
-            trigger_error(sprintf("cURL error: '%s'",curl_error($this->curl)),E_USER_ERROR);
-        
-        if($this->debug)
-            printf("Requesting cURL PUT to base '%s' / path '%s' / abspath '%s' for %d bytes at offset %d\n",$this->base_url,$path,$abspath,strlen($buf),$offset);
-        
-        $ret=curl_exec($this->curl);
-        
+
         if($ret===FALSE) {
-            printf("cURL error: '%s'\n",curl_error($this->curl));
-            return -FUSE_EINVAL;
+            printf("curl_get('%s'): curl_setopt failed with '%s'\n",$path,curl_error($this->curl));
+            return -FUSE_EIO;
         }
+
+        $ret=curl_exec($this->curl);
+        if($ret===FALSE) {
+            printf("curl_get('%s'): curl_exec failed with '%s'\n",$path,curl_error($this->curl));
+            return -FUSE_EIO;
+        }        
         
         //this deletes the tmpfile, too
         fclose($tmp);
@@ -572,66 +604,17 @@ Options specific to %1\$s:
         return 0;
     }
 
-    //callback for in-band data of DELE
-    //callback not anonymous because we need to transfer data out of this function using $this
-    public function curl_dele_cb($res,$str) {
-        if($this->debug_raw)
-            printf("curl_dele_cb: got '%s'\n",$str);
-        
-        switch($this->curl_dele_data["state"]) {
-            case 0: //didn't see a 215 from the SYST, wait for it
-                if(substr($str,0,4)!="215 ") {
-                    break;
-                }
-                $this->curl_dele_data["state"]=1;
-            break;
-            case 1: //have seen a 215 OK from SYST, waiting for 250 File deleted
-                if(substr($str,0,3)=="250") {
-                    curl_setopt_array($res,array(CURLOPT_HEADERFUNCTION=>NULL));
-                    $this->curl_dele_data["state"]=FALSE;
-                    break;
-                } else {
-                    //prevent further processing
-                    curl_setopt_array($res,array(CURLOPT_HEADERFUNCTION=>NULL));
-                    $this->curl_dele_data["state"]=FALSE;
-                    $this->curl_dele_data["error"]=$str;
-                    break;
-                }
-            break;
-        }
-        return strlen($str);
-    }
 
     //delete a file
     public function curl_dele($path) {
+        if($this->debug)
+            printf("Requesting cURL DELE to base '%s' / path '%s'\n",$this->base_url,$path);
+        
         if(substr($path,0,1)=="/")
             $path=substr($path,1);
         $abspath=$this->remotedir.$path;
-    
-        $this->curl_reset();
         
-        $this->curl_dele_data=array("state"=>0,"data"=>array());
-        
-        $ret=curl_setopt_array($this->curl,array(
-            CURLOPT_URL=>$this->base_url,
-            CURLOPT_QUOTE=>array("SYST","DELE $abspath"),
-            CURLOPT_HEADERFUNCTION=>array($this,"curl_dele_cb"),
-            CURLOPT_NOBODY=>true,
-        ));
-        if($ret===FALSE)
-            trigger_error(sprintf("cURL error: '%s'",curl_error($this->curl)),E_USER_ERROR);
-        
-        if($this->debug)
-            printf("Requesting cURL DELE from base '%s' / path '%s' / abspath '%s'\n",$this->base_url,$path,$abspath);
-        
-        $ret=curl_exec($this->curl);
-        
-        if($ret===FALSE) {
-            printf("cURL error: '%s'\n",curl_error($this->curl));
-            return -FUSE_EINVAL;
-        }
-        
-        return 0;
+        return $this->curl_inband_cmd("DELE $abspath");
     }
     
     //FUSE: get attributes of a file
