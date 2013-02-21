@@ -356,46 +356,60 @@ Options specific to %1\$s:
     //callback not anonymous because we need to transfer data out of this function using $this
     public function curl_inband_cb($res,$str) {
         if($this->debug_raw)
-            printf("curl_inband_cb: state %d, got '%s', expecting %s as OK\n",$this->curl_inband_data["state"],$str,$this->curl_inband_data["expect_okcode"]);
+            printf("curl_inband_cb: state %d, got '%s'\n",$this->curl_inband_data["state"],$str);
         elseif($this->debug)
             printf("curl_inband_cb: state %d\n",$this->curl_inband_data["state"]);
-        
+      
+        $rc=substr($str,0,3);
+        $st=substr($str,3,1);
+        $d=&$this->curl_inband_data; //save typing :D
+        $cc=$d["cmds"][$d["current_cmd"]];
+        printf("will accept %s, rc %s st %s\n",$cc[2],$rc,$st);
+        //States:
+        //0 - waiting for 215 SYST reply (SYST is automatically inserted by curl_inband_cb)
+        //    if rc is not 215, continue
+        //    if rc is 215, set data[state] to 1, data[current_cmd]=1
+        //1 - waiting for expect-ec or expect-oc of the command in data[cmds][data[current_cmd]]
+        //    if rc is not oc, set data[state]=FALSE, data[error] to line and halt processing
+        //    if rc is oc and st is ' ', increment data[current_cmd] and add the line to data[data]
+        //    if rc is oc and st is '-', set state=2
+        //2 - waiting for "oc-"
+        //    if not (rc is oc and st=' '), add line to data[data]
+        //    if rc is oc and st is ' ', increment data[current_cmd] and set state=1
         switch($this->curl_inband_data["state"]) {
-            case 0: //didn't see a 215 from the SYST, wait for it
-                if(substr($str,0,4)!="215 ") {
+            case 0:
+                if($rc!=="215")
                     break;
-                }
-                $this->curl_inband_data["state"]=1;
+                if($st!=" ") //'215-' should normally not happen, but just in case... wait for the '215 '
+                    break;
+                $d["state"]=1;
+                $d["current_cmd"]=1;
             break;
-            case 1: //have seen a 215 OK from SYST, waiting for 250 OK
-                //250 OK but with continuation data (which we have to catch)
-                if(substr($str,0,4)==$this->curl_inband_data["expect_okcode"]."-") {
-                    $this->curl_inband_data["state"]=2;
+            case 1:
+                if($rc!=$cc[2]) {
+                    $d["error"]=$str;
+                    $d["state"]=FALSE;
                     break;
-                } elseif(substr($str,0,4)==$this->curl_inband_data["expect_okcode"]." ") {
-                    curl_setopt_array($res,array(CURLOPT_HEADERFUNCTION=>NULL));
-                    $this->curl_inband_data["state"]=4;
-                    break;
-                } else {
-                    //prevent further processing
-                    curl_setopt_array($res,array(CURLOPT_HEADERFUNCTION=>NULL));
-                    $this->curl_inband_data["state"]=FALSE;
-                    $this->curl_inband_data["error"]=$str;
-                    break;
+                } elseif($st==" ") {
+                    $d["data"][]=$str;
+                    $d["current_cmd"]++;
+                } elseif($st=="-") {
+                    $d["state"]=2; 
                 }
             break;
-            case 2: //either the actual communication data or a "250 " saying "end of data"
-                if(substr($str,0,4)==$this->curl_inband_data["expect_okcode"]." ") {
-                    curl_setopt_array($res,array(CURLOPT_HEADERFUNCTION=>NULL));
-                    $this->curl_inband_data["state"]=4;
-                    break;
-                }
-                $this->curl_inband_data["data"][]=$str;
+            case 2:
+                if($rc==$cc[2] && $st==" ") {
+                    $d["current_cmd"]++;
+                    $d["state"]=1;
+                } else
+                    $d["data"][]=$str;
             break;
-            
         }
+        if($d["current_cmd"]>=sizeof($d["cmds"]) || $d["state"]===FALSE)
+            curl_setopt_array($res,array(CURLOPT_HEADERFUNCTION=>NULL));
+
         if($this->debug)
-            printf("curl_inband_cb: leave, state now %d\n",$this->curl_inband_data["state"]);
+            printf("curl_inband_cb: leave, state now %d, cc %d\n",$d["state"],$d["current_cmd"]);
         return strlen($str);
     }
     //run a in-band CURL command. On success, return 0; on failure, return -FUSE_EIO and the error in
@@ -407,34 +421,51 @@ Options specific to %1\$s:
     //      that cURL doesn't run SYST on connects in the future and use its unique 215 to establish a clean
     //      state.
     public function curl_inband_cmd($cmd,$expect_errorcode="",$expect_okcode="250") {
-        if($this->debug)
-            printf("%s(cmd='%s', expect_ec=%s, expect_ok=%s) called\n",__FUNCTION__,$cmd,$expect_errorcode,$expect_okcode);
+//        if($this->debug)
+            printf("%s(cmd='%s', expect_ec=%s, expect_ok=%s) called\n",__FUNCTION__,compact_pa($cmd),$expect_errorcode,$expect_okcode);
 
-        $this->curl_inband_data=array("state"=>0,"data"=>array(),"expect_okcode"=>$expect_okcode);
+        if(!is_array($cmd))
+            $cmd=array(array("SYST","","215"),array($cmd,$expect_errorcode,$expect_okcode));
+        else
+            array_unshift($cmd,array("SYST","","215"));
+        
+        $ops=array();
+        foreach($cmd as $idx=>$op) {
+            if(!is_array($op)) {
+                printf("curl_inband_cmd: cmd %d is not an array\n",$idx);
+                return -FUSE_EIO;
+            } elseif(sizeof($op)!=3) {
+                printf("curl_inband_cmd: size of op %d is not 3\n",$idx);
+                return -FUSE_EIO;
+            }
+            $ops[]=$op[0];
+        }
+        
+        $this->curl_inband_data=array("state"=>0,"data"=>array(),"cmds"=>$cmd,"current_cmd"=>0,"error"=>"");
         
         $ret=$this->curl_setopt(array(
             CURLOPT_URL=>$this->base_url,
-            CURLOPT_QUOTE=>array("SYST",$cmd),
+            CURLOPT_QUOTE=>$ops,
             CURLOPT_HEADERFUNCTION=>array($this,"curl_inband_cb"),
             CURLOPT_NOBODY=>true
         ));
         if($ret===FALSE) {
-            printf("curl_inband_cmd('%s'): curl_setopt failed with '%s'\n",$cmd,curl_error($this->curl));
+            printf("curl_inband_cmd('%s'): curl_setopt failed with '%s'\n",compact_pa($ops),curl_error($this->curl));
             return -FUSE_EIO;
         }
         
         $ret=curl_exec($this->curl);
         if($ret===FALSE && $this->curl_inband_data["state"]!==FALSE) {
-            printf("curl_inband_cmd('%s'): unexpected error '%s'\n",$cmd,curl_error($this->curl));
+            printf("curl_inband_cmd('%s'): unexpected error '%s'\n",compact_pa($ops),curl_error($this->curl));
             return -FUSE_EIO;
         } elseif($this->curl_inband_data["state"]===FALSE) {
             $ec=substr($this->curl_inband_data["error"],0,3);
-            if($ec==$expect_errorcode) {
+            if($ec==$this->curl_inband_data["cmds"][$this->curl_inband_data["current_cmd"]][1]) {
                 if($this->debug)
-                    printf("curl_inband_cmd('%s'): expected error '%s'\n",$cmd,$this->curl_inband_data["error"]);
+                    printf("curl_inband_cmd('%s'): expected error '%s'\n",compact_pa($ops),$this->curl_inband_data["error"]);
                 return -FUSE_EINVAL;
             } else {
-                printf("curl_inband_cmd('%s'): unexpected error '%s'\n",$cmd,$this->curl_inband_data["error"]);
+                printf("curl_inband_cmd('%s'): unexpected error '%s'\n",compact_pa($ops),$this->curl_inband_data["error"]);
                 return -FUSE_EIO;
             }
         }
