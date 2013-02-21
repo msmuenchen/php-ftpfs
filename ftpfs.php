@@ -1118,9 +1118,47 @@ Options specific to %1\$s:
             printf("truncate('%s',%d): return 0\n",$path,$length);
         return 0;
     }
-    public function utime() {
-        printf("PHPFS: %s called\n", __FUNCTION__);
-        return -FUSE_ENOSYS;
+
+    //Sets atime and mtime of path
+    public function utime($path,$atime,$mtime) {
+        if($this->debug)
+            printf("PHPFS: %s(path='%s', atime='%d' (%s), mtime='%d' (%s)) called\n", __FUNCTION__,$path,$atime,date("d.m.Y H:i:s",$atime),$mtime,date("d.m.Y H:i:s"),$mtime);
+        
+        //check if we're supposed to set atime/mtime
+        if($atime!=0 || $mtime!=0) {
+            printf("utime('%s'): can't explicitly set atime/mtime\n",$path);
+            return -FUSE_EFAULT;
+        }
+        
+        //check if the file exists (if not, get it)
+        $stat=$this->curl_mlst($path);
+        if($stat!==-FUSE_ENOENT)
+            return $stat;
+        
+        if($stat===-FUSE_ENOENT) {
+            //File did not exist, create it
+            $ret=$this->curl_put($path,0,"");
+            if($ret<0)
+                return $ret;
+            
+            //TODO: chmod - is this necessary here?
+            
+            //check if the given endpoint exists now
+            $stat=$this->curl_mlst($path);
+            if($stat==-FUSE_ENOENT) {
+                printf("utime('%s'): could not create target\n",$path);
+                return -FUSE_EFAULT;
+            }
+        } else {
+            //TODO: Check if server can use SITE UTIME or MDTM
+            //See http://www.rjh.org.uk/ftp-report.html
+            printf("utime('%s'): can't set atime/mtime on existing file\n",$path);
+            return -FUSE_EFAULT;
+        }
+        
+        if($this->debug)
+            printf("utime('%s'): return 0\n",$path);
+        return 0;
     }
     
     //open a file
