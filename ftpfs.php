@@ -750,7 +750,10 @@ Options specific to %1\$s:
             printf("mknod('%s'): target exists\n",$path);
             return -FUSE_EEXISTS;
         }
+        
         $ret=$this->curl_put($path,0,"");
+        if($ret<0)
+            return $ret;
         
         //TODO: chmod
         
