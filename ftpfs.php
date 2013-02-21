@@ -1084,43 +1084,76 @@ Options specific to %1\$s:
     public function truncate($path,$length) {
         if($this->debug)
             printf("PHPFS: %s(path='%s', length=%d) called\n", __FUNCTION__,$path,$length);
-        
-        //truncate to specific length is not supported
-        //todo: implement this using get, substr
-        if($length > 0) {
-            printf("truncate('%s',%d): length adjustments not supported\n",$path,$length);
-        }
-        
+
         //check if the file exists
         $stat=$this->curl_mlst($path);
         if($stat<0)
             return $stat;
+
+        if($stat["type"]=="dir")
+            return -FUSE_EISDIR;
         
+        //Nothing to do here?
+        if($stat["size"]==$length)
+            return 0;
+        
+        //do we need to preserve content?
+        if($length>0) {
+            $buf=$this->curl_get($path,0,$stat["size"]);
+            if($buf<0)
+                return $buf;
+            $bl=strlen($buf); //cache this
+            if($bl!=$stat["size"]) {
+                printf("truncate('%s'): buffer length %d does not match size %d\n",$path,$bl,$stat["size"]);
+                return -FUSE_EIO;
+            }
+        } else
+            $buf="";
+
+        //check if we can delete
+        if(!isset($stat["perm"]["d"])) {
+            printf("truncate('%s'): DELE permission not set\n",$path);
+            return -FUSE_EACCES;
+        }
+
         //delete the old file
         $ret=$this->curl_dele($path);
         if($ret<0)
             return $ret;
 
         //check if the file doesn't exist
-        $stat=$this->curl_mlst($path);
-        if($stat<0 && $stat!==-FUSE_ENOENT)
-            return $stat;
-        elseif($stat===-FUSE_ENOENT) {
+        $stat_del=$this->curl_mlst($path);
+        if($stat_del<0 && $stat_del!==-FUSE_ENOENT)
+            return $stat_del;
+        elseif($stat_del===-FUSE_ENOENT) {
             //Do nothing, all ok
         } else {
-            printf("truncate('%s',%d): file still exists after DELE\n",$path,$length);
+            printf("truncate('%s'): file still exists after DELE\n",$path);
             return -FUSE_EIO;
         }
         
-        //put an empty file
-        $ret=$this->curl_put($path,0,"");
-        if($ret<0)
-            return $ret;
+        //modify the buffer
+        if($stat["size"]>$length) {
+            $buf=substr($buf,0,$length);
+        } elseif($stat["size"]<$length) {
+            $buf=str_pad($buf,$length,"\0",STR_PAD_RIGHT);
+        }
         
-        //check if the file exists
-        $stat=$this->curl_mlst($path);
-        if($stat<0)
-            return $stat;
+        //put the file back
+        $ret=$this->curl_put($path,0,$buf);
+        if($ret<0) {
+            printf("truncate('%s'): put() failed\n",$path);
+            return -FUSE_EIO;
+        }
+        
+        //see if it has correct size
+        $stat_new=$this->curl_mlst($path);
+        if($stat_new<0)
+            return $stat_new;
+        if($length!=$stat_new["size"]) {
+            printf("truncate('%s'): size mismatch: before %d, after %d\n",$path,$length,$stat_new["size"]);
+            return -FUSE_EIO;
+        }        
         
         if($this->debug)
             printf("truncate('%s',%d): return 0\n",$path,$length);
