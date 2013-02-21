@@ -496,6 +496,21 @@ Options specific to %1\$s:
         return $ret;
     }
 
+    public function curl_rename($from,$to) {
+        printf("%s(from='%s', to='%s') called\n",__FUNCTION__,$from,$to);
+        
+        if(substr($from,0,1)=="/")
+            $from=substr($from,1);
+        $absfrom=$this->remotedir.$from;
+        if(substr($to,0,1)=="/")
+            $to=substr($to,1);
+        $absto=$this->remotedir.$to;
+        
+        $ret=$this->curl_inband_cmd(array(array("RNFR $absfrom","","350"),array("RNTO $absto","","250")));
+
+        return $ret;
+    }
+    
     //return an array with the features reported by the server
     public function curl_feat() {
         if($this->debug)
@@ -1012,9 +1027,35 @@ Options specific to %1\$s:
         return -FUSE_ENOSYS;
     }
     
-    public function rename() {
-        printf("PHPFS: %s called\n", __FUNCTION__);
-        return -FUSE_ENOSYS;
+    public function rename($path_from,$path_to) {
+        printf("PHPFS: %s(path_from='%s', path_to='%s' called\n", __FUNCTION__,$path_from,$path_to);
+        
+        //check if from exists and to doesn't
+        $stat_from=$this->curl_mlst($path_from);
+        $stat_to=$this->curl_mlst($path_to);
+        if($stat_from<0)
+            return $stat_from;
+        if(is_array($stat_to))
+            return -FUSE_EEXIST;
+        if($stat_to!==-FUSE_ENOENT)
+            return $stat_to;
+        
+        //do the rename
+        $ret=$this->curl_rename($path_from, $path_to);
+        if($ret<0)
+            return $ret;
+        
+        //check if to exists and from doesn't
+        $stat_from=$this->curl_mlst($path_from);
+        $stat_to=$this->curl_mlst($path_to);
+        if($stat_to<0)
+            return $stat_to;
+        if(is_array($stat_from))
+            return -FUSE_EEXIST;
+        if($stat_from!==-FUSE_ENOENT)
+            return $stat_from;
+        
+        return 0;
     }
     public function link() {
         printf("PHPFS: %s called\n", __FUNCTION__);
