@@ -316,7 +316,7 @@ Options specific to %1\$s:
     //callback not anonymous because we need to transfer data out of this function using $this
     public function curl_inband_cb($res,$str) {
         if($this->debug_raw)
-            printf("curl_inband_cb: state %d, got '%s'\n",$str);
+            printf("curl_inband_cb: state %d, got '%s'\n",$this->curl_inband_data["state"],$str);
         elseif($this->debug)
             printf("curl_inband_cb: state %d\n",$this->curl_inband_data["state"]);
         
@@ -496,10 +496,10 @@ Options specific to %1\$s:
         if(substr($path,0,1)=="/")
             $path=substr($path,1);
     
+        $abspath=$this->base_url.$path;
+
         if($this->debug)
             printf("Requesting cURL MLSD from base '%s' / path '%s' / abspath '%s'\n",$this->base_url,$path,$abspath);
-
-        $abspath=$this->base_url.$path;
         
         $ret=$this->curl_outband_cmd($abspath,"MLSD");
         if($ret<0)
