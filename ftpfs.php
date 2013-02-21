@@ -51,6 +51,7 @@ class PHPFTPFS extends Fuse {
             "KEY_DEBUG_CURL",
             "KEY_DEBUG_RAW",
             "KEY_DEBUG_USER",
+            "KEY_DEBUG_FUSE",
             "KEY_URL"
         ));
         $this->opts     = array(
@@ -72,6 +73,7 @@ class PHPFTPFS extends Fuse {
             "debug_curl" => $this->opt_keys["KEY_DEBUG_CURL"],
             "debug_raw" => $this->opt_keys["KEY_DEBUG_RAW"],
             "debug_user" => $this->opt_keys["KEY_DEBUG_USER"],
+            "debug_fuse" => $this->opt_keys["KEY_DEBUG_FUSE"],
             "ftp_url " => $this->opt_keys["KEY_URL"]
         );
         $this->userdata = array();
@@ -235,6 +237,7 @@ Options specific to %1\$s:
     -o debug_user             debug only %1\$s code, but not FUSE
     -o debug_curl             set CURLOPT_VERBOSE
     -o debug_raw              print the raw data recieved by the curl interfaces
+    -o debug_fuse             debug only FUSE but not the userland
 
 ", $this->name, $argv[0]);
                 return 0;
@@ -259,6 +262,11 @@ Options specific to %1\$s:
                 break;
             case $this->opt_keys["KEY_DEBUG_RAW"]:
                 $this->debug_raw=true;
+                return 0;
+                break;
+            case $this->opt_keys["KEY_DEBUG_FUSE"]:
+                array_push($argv,"-d");
+                $argc++;
                 return 0;
                 break;
             case $this->opt_keys["KEY_USER"]:
