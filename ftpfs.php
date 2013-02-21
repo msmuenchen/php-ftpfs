@@ -164,7 +164,11 @@ class PHPFTPFS extends Fuse {
         
         if($this->run_fuse) {
             //run FUSE
-            $argv[0]=$this->name;
+            array_push($argv,"-o");
+            array_push($argv,sprintf("fsname='%s'@%s%s",$this->user,$this->host,$this->remotedir));
+            array_push($argv,"-o");
+            array_push($argv,sprintf("subtype=%s",$this->name));
+            $argc+=4;
             if($this->debug)
                 printf("Calling fuse_main with args: %s",print_r($argv,true));
             $this->fuse_main($argc, $argv);
