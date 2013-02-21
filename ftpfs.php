@@ -1031,8 +1031,9 @@ Options specific to %1\$s:
             //Do nothing. The OS will set $offset in the write calls, we do not have to track it
         }
         if(($mode & FUSE_O_NONBLOCK)==FUSE_O_NONBLOCK) {
-            printf("open('%s'): invalid mode NONBLOCK\n",$path);
-            return -FUSE_EINVAL;
+            //Do nothing. The OS will (or, at least it should) take care of this for us...
+//            printf("open('%s'): invalid mode NONBLOCK\n",$path);
+//            return -FUSE_EINVAL;
         }
         if(defined("FUSE_O_DSYNC") && ($mode & FUSE_O_DSYNC)==FUSE_O_DSYNC) {
             printf("open('%s'): invalid mode DSYNC\n",$path);
