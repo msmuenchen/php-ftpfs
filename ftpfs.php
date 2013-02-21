@@ -1161,40 +1161,71 @@ Options specific to %1\$s:
     }
 
     //Sets atime and mtime of path
+    //TODO: Check if server can use SITE UTIME or MDTM
+    //See http://www.rjh.org.uk/ftp-report.html
     public function utime($path,$atime,$mtime) {
         if($this->debug)
             printf("PHPFS: %s(path='%s', atime='%d' (%s), mtime='%d' (%s)) called\n", __FUNCTION__,$path,$atime,date("d.m.Y H:i:s",$atime),$mtime,date("d.m.Y H:i:s"),$mtime);
         
         //check if we're supposed to set atime/mtime
         if($atime!=0 || $mtime!=0) {
-            printf("utime('%s'): can't explicitly set atime/mtime\n",$path);
-            return -FUSE_EFAULT;
+            if($this->debug)
+                printf("utime('%s'): warning: can't explicitly set atime/mtime, will set to current!\n",$path);
         }
         
-        //check if the file exists (if not, get it)
+        //check if the file exists
         $stat=$this->curl_mlst($path);
-        if($stat!==-FUSE_ENOENT)
+        if($stat<0)
             return $stat;
+
+        if($stat["type"]=="dir")
+            return -FUSE_EISDIR;
         
-        if($stat===-FUSE_ENOENT) {
-            //File did not exist, create it
-            $ret=$this->curl_put($path,0,"");
-            if($ret<0)
-                return $ret;
-            
-            //TODO: chmod - is this necessary here?
-            
-            //check if the given endpoint exists now
-            $stat=$this->curl_mlst($path);
-            if($stat==-FUSE_ENOENT) {
-                printf("utime('%s'): could not create target\n",$path);
-                return -FUSE_EFAULT;
-            }
+        $buf=$this->curl_get($path,0,$stat["size"]);
+        if($buf<0)
+            return $buf;
+        $bl=strlen($buf); //cache this
+        if($bl!=$stat["size"]) {
+            printf("utime('%s'): buffer length %d does not match size %d\n",$path,$bl,$stat["size"]);
+            return -FUSE_EIO;
+        }
+
+        //check if we can delete
+        if(!isset($stat["perm"]["d"])) {
+            printf("utime('%s'): DELE permission not set\n",$path);
+            return -FUSE_EACCES;
+        }
+
+        //delete the old file
+        $ret=$this->curl_dele($path);
+        if($ret<0)
+            return $ret;
+
+        //check if the file doesn't exist
+        $stat_del=$this->curl_mlst($path);
+        if($stat_del<0 && $stat_del!==-FUSE_ENOENT)
+            return $stat_del;
+        elseif($stat_del===-FUSE_ENOENT) {
+            //Do nothing, all ok
         } else {
-            //TODO: Check if server can use SITE UTIME or MDTM
-            //See http://www.rjh.org.uk/ftp-report.html
-            printf("utime('%s'): can't set atime/mtime on existing file\n",$path);
-            return -FUSE_EFAULT;
+            printf("utime('%s'): file still exists after DELE\n",$path);
+            return -FUSE_EIO;
+        }
+        
+        //put the file back
+        $ret=$this->curl_put($path,0,$buf);
+        if($ret<0) {
+            printf("utime('%s'): put() failed\n",$path);
+            return -FUSE_EIO;
+        }
+        
+        //see if it has correct size
+        $stat_new=$this->curl_mlst($path);
+        if($stat_new<0)
+            return $stat_new;
+        if($stat["size"]!=$stat_new["size"]) {
+            printf("utime('%s'): size mismatch: before %d, after %d\n",$path,$stat["size"],$stat_new["size"]);
+            return -FUSE_EIO;
         }
         
         if($this->debug)
