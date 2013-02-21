@@ -1418,15 +1418,17 @@ Options specific to %1\$s:
 
 //"compact" print_r($a,true)
 function compact_pa($a) {
-    $buf="";
     if(!is_array($a))
         return $a;
+    $buf="a(";
     foreach($a as $k=>$v) {
         if(is_array($v))
             $v=compact_pa($v);
-        $buf.="'$k'=>'$v',";
+        else
+            $v="'$v'";
+        $buf.="'$k'=>$v,";
     }
-    return substr($buf,0,-1);
+    return substr($buf,0,-1).")";
 }
 $fuse = new PHPFTPFS();
 $fuse->main($argc, $argv);
