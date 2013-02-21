@@ -617,6 +617,18 @@ Options specific to %1\$s:
         return $this->curl_inband_cmd("DELE $abspath");
     }
     
+    //create a directory
+    public function curl_mkdir($path) {
+        if($this->debug)
+            printf("Requesting cURL MKDIR to base '%s' / path '%s'\n",$this->base_url,$path);
+        
+        if(substr($path,0,1)=="/")
+            $path=substr($path,1);
+        $abspath=$this->remotedir.$path;
+        
+        return $this->curl_inband_cmd("MKD $abspath","257");
+    }
+    
     //FUSE: get attributes of a file
     public function getattr($path, &$st) {
         if($this->debug)
@@ -754,9 +766,31 @@ Options specific to %1\$s:
         return 0;
     }
     
-    public function mkdir() {
-        printf("PHPFS: %s called\n", __FUNCTION__);
-        return -FUSE_ENOSYS;
+    public function mkdir($path,$mode) {
+        printf("PHPFS: %s(path='%s', mode='%o') called\n", __FUNCTION__,$path,$mode);
+
+        //check if the given endpoint already exists
+        $stat=$this->curl_mlst($path);
+        if($stat!=-FUSE_ENOENT) {
+            printf("mkdir('%s'): target exists\n",$path);
+            return -FUSE_EEXISTS;
+        }
+        
+        $ret=$this->curl_mkdir($path);
+        if($ret<0)
+            return $ret;
+        //TODO: chmod
+        
+        //check if the given endpoint exists now
+        $stat=$this->curl_mlst($path);
+        if($stat==-FUSE_ENOENT) {
+            printf("mkdir('%s'): could not create target\n",$path);
+            return -FUSE_EFAULT;
+        }
+        
+        if($this->debug)
+            printf("mkdir('%s'): return 0\n",$path);
+        return 0;
     }
 
     //remove a file
