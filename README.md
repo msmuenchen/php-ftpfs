@@ -17,9 +17,12 @@ you with a FTP-served filesystem.
 * Around 200MB of free disk space for git builds (the PHP source is huge)
 
 ## Install
-Run ./setup.php. This will install php-ftpfs binaries in /opt/phpftpfs/ and
-the binary itself in /usr/local/bin/ftpfs. If you for some reason need to use
-a different location, use --bin-dir to provide a directory with a bin/
+Either clone the repository from https://github.com/msmuenchen/php-ftpfs.git
+or grab a snapshot and unpack it. Now change into the php-ftpfs directory.
+
+Then, run ./setup.php. This will install php-ftpfs binaries in /opt/phpftpfs/
+and the binary itself in /usr/local/bin/ftpfs. If you for some reason need to
+use a different location, use --bin-dir to provide a directory with a bin/
 subdirectory, where the ftpfs binary will be installed, and --inst-dir to
 provide a directory for the binaries.
 
