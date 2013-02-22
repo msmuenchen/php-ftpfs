@@ -83,6 +83,13 @@ appending > logfile 2>&1.
 Please replace your password and your username, as they WILL appear in the
 logs! There is NO way for php-ftpfs to filter them out of the logs!
 
+## ToDo
+1. Write tests, if such tests are possible at all with an automated test system
+2. Support servers using only LIST instead of MLS(D/T)
+3. Get a filesystem test suite and run it to verify php-ftpfs.
+4. Use a metadata cache
+5. Use a file cache
+
 ## Contribute
 File a pull request against the "msmuenchen" forks on GitHub. The original
 php-fuse from gree is no longer maintained!
