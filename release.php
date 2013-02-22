@@ -18,11 +18,11 @@ function setup_exec($cmd, $return_out=false) {
 }
 
 //default config
-$conf=array("outfile"=>"../php-ftpfs-%d.tar.gz","tag"=>"HEAD","create-tag"=>false);
+$conf=array("outfile"=>"../php-ftpfs-%d.tar.gz","tag"=>"HEAD","create-tag"=>false,"message"=>"release-script creating tag");
 
 //init getopt
-$shortopts="h";
-$longopts=array("outfile::","tag::","create-tag","help");
+$shortopts="hm::";
+$longopts=array("outfile::","tag::","create-tag","help","message::");
 $options=getopt($shortopts,$longopts);
 
 //help
@@ -41,9 +41,11 @@ Options:
                               %4\$s. Must exist, unless --create-tag is given.
                               Output format always will be .tar.gz
     --create-tag              create the tag out of current HEAD
+    -m --message              tag creation message, defaults to
+                              '%5\$s'
     
 
-","php-ftpfs setup",$argv[0],$conf["outfile"],$conf["tag"]);
+","php-ftpfs release creator",$argv[0],$conf["outfile"],$conf["tag"],$conf["message"]);
   exit(1);
 }
 
@@ -54,14 +56,21 @@ if(isset($options["tag"]) && !is_array($options["tag"]))
   $conf["tag"]=$options["tag"];
 if(isset($options["create-tag"]))
   $conf["create-tag"]=true;
+if(isset($options["m"]) && !is_array($options["m"]))
+  $conf["message"]=$options["m"];
+if(isset($options["message"]) && !is_array($options["message"]))
+  $conf["message"]=$options["message"];
 
 //check if these are paths, convert them to paths if not
 $scriptloc=realpath(dirname(__FILE__))."/";
 if(substr($conf["outfile"],0,1)!="/") //relative path
   $conf["outfile"]=$scriptloc.$conf["outfile"];
 
-printf("Creating a snapshot file in %s for branch/tag %s. Continue ([y]/n)? ",$conf["outfile"],$conf["tag"]);
-$in=strtolower(fgetc(STDIN));
+printf("Creating a snapshot file in %s for branch/tag %s\n",$conf["outfile"],$conf["tag"]);
+if($conf["create-tag"]==true)
+  printf("Creating tag with message '%s'\n",$conf["message"]);
+printf("Continue ([y]/n)? ");
+$in=trim(strtolower(fgetc(STDIN)));
 if($in!="y" && $in!="")
   exit(1);
 
@@ -74,7 +83,7 @@ if(is_dir($tmploc)) {
 
 //create the tag
 if($conf["create-tag"])
-  setup_exec("cd $scriptloc && git tag -a ".escapeshellarg($conf["tag"])." -m \"release-script creating tag\"");
+  setup_exec("cd $scriptloc && git tag -a ".escapeshellarg($conf["tag"])." -m ".escapeshellarg($conf["message"]));
 
 //clone the repository and clean it up
 //setup_exec("cd $scriptloc && git clone --no-hardlinks $scriptloc $tmploc");
