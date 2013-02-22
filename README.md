@@ -47,6 +47,18 @@ urlencoded values. If they're not, you'll notice.
 Values can be omitted, in which case defaults are used, so the only real
 requirement is ftp_host. 
 
+## Caching
+### Metadata
+Metadata is cached for getattr() / getdir() by default for 60 seconds. To
+disable, use -o cache_maxage=0; I recommend setting it at least to 5 seconds
+even on high-variable sites and something around 1800-3600 if you're the only
+user on the site (like when you're on a web server).
+
+### File contents
+Currently, file contents are not cached. Eventually they will be, though,
+with the index being the filename and the mtime of the file (this is why the
+mtime is important!).
+
 ## Caveats
 On 32-bit systems, you WILL encounter problems with files larger than 2GB,
 because PHPs int is 31-bit plus sign.
@@ -87,7 +99,7 @@ logs! There is NO way for php-ftpfs to filter them out of the logs!
 1. Write tests, if such tests are possible at all with an automated test system
 2. Support servers using only LIST instead of MLS(D/T)
 3. Get a filesystem test suite and run it to verify php-ftpfs.
-4. Use a metadata cache
+4. Use a metadata cache (done)
 5. Use a file cache
 
 ## Contribute
