@@ -11,32 +11,22 @@ you with a FTP-served filesystem.
 * halfway current Linux kernel, libfuse and libcurl. In theory, any system
   supported by libfuse can be used, but it has not been tested.
 * working build system including autoconf, automake and friends
+* all build dependencies of bare PHP, additionally needed are libfuse-dev and
+  libcurl-dev
+* Non-snapshot or non-release builds will require git.
+* Around 200MB of free disk space for git builds (the PHP source is huge)
 
 ## Install
-### From source
-Get the bleeding-edge version of php from
-https://github.com/php/php-src/ and integrate the patchset from
-https://github.com/msmuenchen/php-src/, branch msm_changes (or use that repo
-by git clone, then git checkout msm_changes). In the future this won't be
-needed, but the workarounds WILL massively degrade performance. You'll be
-warned if this is the case.
+Run ./setup.php. This will install php-ftpfs binaries in /opt/phpftpfs/ and
+the binary itself in /usr/local/bin/ftpfs. If you for some reason need to use
+a different location, use --bin-dir to provide a directory with a bin/
+subdirectory, where the ftpfs binary will be installed, and --inst-dir to
+provide a directory for the binaries.
 
-Then, install libfuse-dev and the libcurl-dev packages using your package
-manager, as well as the PHP build deps (I won't get into detail here, see
-the PHP wiki).
+In case of missing build dependencies, setup will notify you.
 
-You'll at least need -enable-cli  --with-curl --enable-posix
---enable-filter. It might not hurt to --enable-debug, and if you have an
-existing PHP setup, it is recommended to use --program-suffix=56 to create
-unique files (however, this may still mess up your include directory!).
-
-Then, after you ran make install, check out and install the php-fuse source from
-https://github.com/msmuenchen/php-fuse. You'll most likely need to specify
---with-php-config=php-config56 (php-fuse itself should support php5.3, but
-php-ftpfs requires patching of the curl interface!).
-
-### From binary (only amd64)
-This will be published when it's ready.
+## Uninstall
+Remove $bindir/bin/ftpfs and $instdir.
 
 ## Usage
 Basic: php ftpfs.php /path/to/mount -o ftp_url="ftp://ftp.example.com/"
