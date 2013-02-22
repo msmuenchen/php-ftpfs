@@ -29,9 +29,9 @@ In case of missing build dependencies, setup will notify you.
 Remove $bindir/bin/ftpfs and $instdir.
 
 ## Usage
-Basic: php ftpfs.php /path/to/mount -o ftp_url="ftp://ftp.example.com/"
+Basic: ftpfs /path/to/mount -o ftp_url="ftp://ftp.example.com/"
 
-Help: php ftpfs.php -h (or -H to also include libfuse help)
+Help: ftpfs -h (or -H to also include libfuse help)
 
 ## Runtime options
 The basic requirement is a mountpoint and FTP server information. You can
