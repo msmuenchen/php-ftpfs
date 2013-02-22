@@ -44,9 +44,6 @@ urlencoded values. If they're not, you'll notice.
 Values can be omitted, in which case defaults are used, so the only real
 requirement is ftp_host. 
 
--o big_writes is DEFINITELY recommended. Without it, libfuse will limit
-writes to 4K. You can imagine the performance hit.
-
 ## Caveats
 On 32-bit systems, you WILL encounter problems with files larger than 2GB,
 because PHPs int is 31-bit plus sign.
