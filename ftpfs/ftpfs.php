@@ -1,4 +1,5 @@
 <?php
+/* Git ID: $Id$ */
 //Load FUSE, if it isn't already loaded by php.ini
 if (!extension_loaded("fuse"))
     dl("fuse.so");
@@ -7,7 +8,7 @@ error_reporting(E_ALL);
 class PHPFTPFS extends Fuse {
     //basic needed stuff
     public $name = "phpftpfs";
-    public $version = "0.1a";
+    public $version = 'git-$Id$'; //release.php will update this to use a "usable" identifier
     public $debug=false;
     public $run_fuse=true; //will fuse_main() be called?
     
