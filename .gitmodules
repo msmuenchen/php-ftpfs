@@ -1,0 +1,6 @@
+[submodule "php-fuse"]
+	path = php-fuse
+	url = https://github.com/msmuenchen/php-fuse.git
+[submodule "php-src"]
+	path = php-src
+	url = https://github.com/msmuenchen/php-src.git
