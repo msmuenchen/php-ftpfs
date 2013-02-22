@@ -1,6 +1,38 @@
 #!/usr/bin/env php
 <?php
 
+/**
+ * This function is to replace PHP's extremely buggy realpath().
+ * @param string The original path, can be relative etc.
+ * @return string The resolved path, it might not exist.
+ * @source http://stackoverflow.com/a/4050444/1933738
+ */
+function truepath($path){
+    // whether $path is unix or not
+    $unipath=strlen($path)==0 || $path{0}!='/';
+    // attempts to detect if path is relative in which case, add cwd
+    if(strpos($path,':')===false && $unipath)
+        $path=getcwd().DIRECTORY_SEPARATOR.$path;
+    // resolve path parts (single dot, double dot and double delimiters)
+    $path = str_replace(array('/', '\\'), DIRECTORY_SEPARATOR, $path);
+    $parts = array_filter(explode(DIRECTORY_SEPARATOR, $path), 'strlen');
+    $absolutes = array();
+    foreach ($parts as $part) {
+        if ('.'  == $part) continue;
+        if ('..' == $part) {
+            array_pop($absolutes);
+        } else {
+            $absolutes[] = $part;
+        }
+    }
+    $path=implode(DIRECTORY_SEPARATOR, $absolutes);
+    // resolve any symlinks
+    if(file_exists($path) && linkinfo($path)>0)$path=readlink($path);
+    // put initial separator that could have been lost
+    $path=!$unipath ? '/'.$path : $path;
+    return $path;
+}
+
 //execute a command and check for return values
 function setup_exec($cmd, $return_out=false) {
   $ret=0;
@@ -64,7 +96,7 @@ if(isset($options["message"]) && !is_array($options["message"]))
 //check if these are paths, convert them to paths if not
 $scriptloc=realpath(dirname(__FILE__))."/";
 if(substr($conf["outfile"],0,1)!="/") //relative path
-  $conf["outfile"]=$scriptloc.$conf["outfile"];
+  $conf["outfile"]=truepath($scriptloc.$conf["outfile"]);
 
 printf("Creating a snapshot file in %s for branch/tag %s\n",$conf["outfile"],$conf["tag"]);
 if($conf["create-tag"]==true)
