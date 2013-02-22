@@ -30,6 +30,7 @@ class PHPFTPFS extends Fuse {
     public $uid=0;
     public $gid=0;
     
+    private $cache=array();
     private $curl=NULL;
     private $handles=array(); //keep track of the handles returned by open() here
     private $next_handle_id=1; //do not let phpftpfs run too long, this can overflow!
@@ -226,7 +227,7 @@ Options specific to %1\$s:
     -o ftp_password=s         Password of remote user, default 'user@example.com'
     -o ftp_url=s              Specify host/user/password with a ftp url; warning:
                               remotedir MUST be specified separately!
-    -o cache_maxage=n         Maximum age of cached files in seconds, default 60
+    -o cache_maxage=n         Maximum age of file metadata in seconds, default 60
     -o pasv                   Use PASV FTP mode instead of active transfer mode
     -o controlport=n          Control port of FTP server, default 21
     -o remotedir=s            remote directory to use as base, default /
@@ -587,13 +588,23 @@ Options specific to %1\$s:
 
     //MLST: get information about a specific file or directory (stat() equivalent)
     // See also: RFC 3659 @ http://www.ietf.org/rfc/rfc3659.txt
-    public function curl_mlst($path) {
+    public function curl_mlst($path,$allow_cache=false) {
         if(substr($path,0,1)=="/")
             $path=substr($path,1);
         $abspath=$this->remotedir.$path;
 
         if($this->debug)
             printf("Requesting cURL MLST from base '%s' / path '%s' / abspath '%s'\n",$this->base_url,$path,$abspath);
+        
+        if($allow_cache==true && $this->cache_maxage>0 && isset($this->cache[$abspath]) && isset($this->cache[$abspath]["mlst"])) {
+            if(time()-$this->cache[$abspath]["mlst"]["time"]>$this->cache_maxage) {
+                unset($this->cache[$abspath]["mlst"]);
+                printf("Invalidated MLST cache for '%s'\n",$abspath);
+            } else  {
+                printf("Serving MLST for '%s' out of cache\n",$abspath);
+                return $this->cache[$abspath]["mlst"]["data"];
+            }
+        }
         
         //Enable all MLST fields
         $estr="";
@@ -617,25 +628,40 @@ Options specific to %1\$s:
             $ret=$this->curl_mls_parse($this->curl_inband_data["data"][0]);
         }
         
+        if(!isset($this->cache[$abspath]))
+            $this->cache[$abspath]=array();
+        $this->cache[$abspath]["mlst"]=array("time"=>time(),"data"=>$ret);
+        
         if($this->debug)
             printf("MLST result: '%s'\n",compact_pa($ret));
         return $ret;
     }
     
     //MLSD: get information about the files in a directory
-    public function curl_mlsd($path) {
+    public function curl_mlsd($path,$allow_cache=false) {
         //MLSD must be a path!
         if(substr($path,-1,1)!="/")
             return -FUSE_EINVAL;
         
         if(substr($path,0,1)=="/")
             $path=substr($path,1);
-    
+        
+        $remotepath=$this->remotedir.$path;
         $abspath=$this->base_url.$path;
 
         if($this->debug)
             printf("Requesting cURL MLSD from base '%s' / path '%s' / abspath '%s'\n",$this->base_url,$path,$abspath);
-        
+
+        if($allow_cache==true && $this->cache_maxage>0 && isset($this->cache[$remotepath]) && isset($this->cache[$remotepath]["mlsd"])) {
+            if(time()-$this->cache[$remotepath]["mlsd"]["time"]>$this->cache_maxage) {
+                unset($this->cache[$remotepath]["mlsd"]);
+                printf("Invalidated MLSD cache for '%s'\n",$remotepath);
+            } else  {
+                printf("Serving MLSD for '%s' out of cache\n",$remotepath);
+                return $this->cache[$remotepath]["mlsd"]["data"];
+            }
+        }        
+
         //Enable all MLST fields
         $estr="";
         foreach($this->curl_feat["mlst"] as $opt=>$active)
@@ -667,6 +693,12 @@ Options specific to %1\$s:
             $ret[$entry["filename"]]=$entry;
         }
         
+        if(!isset($this->cache[$remotepath]))
+            $this->cache[$remotepath]=array();
+        $this->cache[$remotepath]["mlsd"]=array("time"=>time(),"data"=>$ret);
+        
+        if($this->debug)
+            printf("MLSD result: '%s'\n",compact_pa($ret));        
         return $ret;
     }
 
@@ -791,7 +823,7 @@ Options specific to %1\$s:
         if($this->debug)
             printf("PHPFS: %s('%s') called\n", __FUNCTION__, $path);
         
-        $data=$this->curl_mlst($path);
+        $data=$this->curl_mlst($path,true);
         if($data<0)
             return $data;
         
@@ -861,13 +893,13 @@ Options specific to %1\$s:
             $path.="/";
         
         //Check if the directory exists
-        $dir=$this->curl_mlst($path);
+        $dir=$this->curl_mlst($path,true);
         if($dir<0) {
             printf("getdir('%s'): target does not exist\n",$path);
             return $dir;
         }
         
-        $files=$this->curl_mlsd($path);
+        $files=$this->curl_mlsd($path,true);
         if($files<0) {
             printf("getdir('%s'): MLSD returned error %d\n",$path,$files);
             return $files;
