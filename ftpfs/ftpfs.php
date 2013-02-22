@@ -23,7 +23,7 @@ class PHPFTPFS extends Fuse {
     public $ipv6=false;
     public $cache_maxage=60;
     public $cachedir="";
-    public $use_cache=false;
+    public $use_fs_cache=false;
     public $debug_curl=false;
     public $base_url="";
     public $debug_raw=false;
@@ -139,12 +139,12 @@ class PHPFTPFS extends Fuse {
             }
 
             //Do we have a cache directory? If yes, test if it is usable.
-            if($this->use_cache) {
+            if($this->use_fs_cache) {
                 //Check if the directory exists
                 $p=realpath($this->cachedir);
                 if($p===false) {
                     trigger_error(sprintf("Cache directory '%s' is not a valid directory, disabling cache",$this->cachedir),E_USER_WARNING);
-                    $this->use_cache=false;
+                    $this->use_fs_cache=false;
                 } else {
                     $this->cachedir=$p;
                     if($this->debug)
@@ -288,7 +288,7 @@ Options specific to %1\$s:
                 break;
             case $this->opt_keys["KEY_CACHEDIR"]:
                 $this->cachedir=substr($arg,9);
-                $this->use_cache=true;
+                $this->use_fs_cache=true;
                 return 0;
                 break;
             case $this->opt_keys["KEY_CONTROLPORT"]:
