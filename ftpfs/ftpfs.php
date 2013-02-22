@@ -22,7 +22,7 @@ class PHPFTPFS extends Fuse {
     public $remotedir="/";
     public $ipv6=false;
     public $cache_maxage=60;
-    public $cachedir="";
+    public $cache_dir="";
     public $use_fs_cache=false;
     public $debug_curl=false;
     public $base_url="";
@@ -31,6 +31,7 @@ class PHPFTPFS extends Fuse {
     public $gid=0;
     
     private $cache=array();
+    private $fs_cache=array();
     private $curl=NULL;
     private $handles=array(); //keep track of the handles returned by open() here
     private $next_handle_id=1; //do not let phpftpfs run too long, this can overflow!
@@ -49,7 +50,7 @@ class PHPFTPFS extends Fuse {
             "KEY_PASV",
             "KEY_REMOTEDIR",
             "KEY_ENABLE_IPV6",
-            "KEY_CACHEDIR",
+            "KEY_CACHE_DIR",
             "KEY_DEBUG_CURL",
             "KEY_DEBUG_RAW",
             "KEY_DEBUG_USER",
@@ -71,7 +72,7 @@ class PHPFTPFS extends Fuse {
             "pasv" => $this->opt_keys["KEY_PASV"],
             "remotedir " => $this->opt_keys["KEY_REMOTEDIR"],
             "ipv6" => $this->opt_keys["KEY_ENABLE_IPV6"],
-            "cachedir " => $this->opt_keys["KEY_CACHEDIR"],
+            "cache_dir " => $this->opt_keys["KEY_CACHE_DIR"],
             "debug_curl" => $this->opt_keys["KEY_DEBUG_CURL"],
             "debug_raw" => $this->opt_keys["KEY_DEBUG_RAW"],
             "debug_user" => $this->opt_keys["KEY_DEBUG_USER"],
@@ -102,8 +103,8 @@ class PHPFTPFS extends Fuse {
                     printf("Using passive transfer\n");
                 if($this->ipv6)
                     printf("Using IPv6 where available\n");
-                if($this->cachedir!="")
-                    printf("Using '%s' as cache directory, maximum age=%d seconds\n",$this->cachedir,$this->cache_maxage);
+                if($this->cache_dir!="")
+                    printf("Using '%s' as cache directory, maximum age=%d seconds\n",$this->cache_dir,$this->cache_maxage);
             }
 
             //Assemble the URL
@@ -141,23 +142,23 @@ class PHPFTPFS extends Fuse {
             //Do we have a cache directory? If yes, test if it is usable.
             if($this->use_fs_cache) {
                 //Check if the directory exists
-                $p=realpath($this->cachedir);
+                $p=realpath($this->cache_dir);
                 if($p===false) {
-                    trigger_error(sprintf("Cache directory '%s' is not a valid directory, disabling cache",$this->cachedir),E_USER_WARNING);
+                    trigger_error(sprintf("Cache directory '%s' is not a valid directory, disabling cache",$this->cache_dir),E_USER_WARNING);
                     $this->use_fs_cache=false;
                 } else {
-                    $this->cachedir=$p;
+                    $this->cache_dir=$p;
                     if($this->debug)
-                        printf("Root cachedir: '%s'\n",$this->cachedir);
+                        printf("Root cache_dir: '%s'\n",$this->cache_dir);
                     
-                    //Try to create the cachedir for this connection (hash of base_url)
-                    $this->cachedir.=sprintf("/%s_%s/",$this->host,md5($this->base_url));
+                    //Try to create the cache_dir for this connection (hash of base_url)
+                    $this->cache_dir.=sprintf("/%s_%s/",$this->host,md5($this->base_url));
                     if($this->debug)
-                        printf("Connection cachedir: '%s'\n",$this->cachedir);
-                    if(!is_dir($this->cachedir)) {
-                        $ret=mkdir($this->cachedir,0700);
+                        printf("Connection cache_dir: '%s'\n",$this->cache_dir);
+                    if(!is_dir($this->cache_dir)) {
+                        $ret=mkdir($this->cache_dir,0700);
                         if($ret===false)
-                            trigger_error(sprintf("Could not create cache directory '%s'",$this->cachedir),E_USER_ERROR);
+                            trigger_error(sprintf("Could not create cache directory '%s'",$this->cache_dir),E_USER_ERROR);
                     }
                 }
             }
@@ -232,7 +233,7 @@ Options specific to %1\$s:
     -o controlport=n          Control port of FTP server, default 21
     -o remotedir=s            remote directory to use as base, default /
     -o ipv6                   use IPv6 if having an AAAA record for the server
-    -o cachedir=s             directory for file cache, will be set readable only
+    -o cache_dir=s             directory for file cache, will be set readable only
                               to the user calling the script. Can be shared by multiple
                               %1\$s instances. If not specified, caching is disabled.
     -o debug_user             debug only %1\$s code, but not FUSE
@@ -286,8 +287,8 @@ Options specific to %1\$s:
                 $this->pasv=true;
                 return 0;
                 break;
-            case $this->opt_keys["KEY_CACHEDIR"]:
-                $this->cachedir=substr($arg,9);
+            case $this->opt_keys["KEY_CACHE_DIR"]:
+                $this->cache_dir=substr($arg,10);
                 $this->use_fs_cache=true;
                 return 0;
                 break;
@@ -1297,6 +1298,99 @@ Options specific to %1\$s:
             printf("utime('%s'): return 0\n",$path);
         return 0;
     }
+
+    //load a file into the fs cache
+    function fsc_load($path) {
+        printf("FSC loading '%s' into cache\n",$path);
+
+        if(!$this->use_fs_cache)
+            return -FUSE_EIO;
+        
+        //base sanity check
+        $stat=$this->curl_mlst($path);
+        if($stat<0)
+            return $stat;
+        elseif($stat["type"]!="file" || $stat["modify"]==0)
+            return -FUSE_EISDIR;
+
+        //get the file
+        $buf=$this->curl_get($path,0,$stat["size"]);
+        $bl=strlen($buf);
+        if($bl!=$stat["size"]) {
+            printf("fsc_load('%s'): buffer length %d does not match size %d\n",$path,$bl,$stat["size"]);
+            return -FUSE_EIO;
+        }
+        
+        if(substr($path,0,1)=="/")
+            $path=substr($path,1);
+        
+        //write the file to cache
+        $cache_path=$this->cache_dir.$path."_".$stat["size"]."_".$stat["modify"];
+        
+        //create subdir levels
+        $cache_dir=dirname($cache_path);
+        printf("cache dir for file %s is %s\n",$cache_path,$cache_dir);
+        if(!is_dir($cache_dir)) {
+            $ret=mkdir($cache_dir,0777,true);
+            if($ret===false)
+                return -FUSE_EIO;
+        }
+        if(is_file($cache_path) && filesize($cache_path)==$stat["size"]) {
+            printf("fsc_load('/%s'): cache file %s already present\n",$path,$cache_path);
+            if(!isset($this->fs_cache["/".$path]))
+                $this->fs_cache["/".$path]=array("dirty"=>false,"stat"=>$stat,"fs"=>$cache_path);
+            return $this->fs_cache["/".$path];
+        }
+        $fp=fopen($cache_path,"w");
+        if($fp===false)
+            return -FUSE_EIO;
+        $ret=fwrite($fp,$buf);
+        if($ret===false)
+            return -FUSE_EIO;
+        $ret=fclose($fp);
+        if($ret===false)
+            return -FUSE_EIO;
+        
+        if(filesize($cache_path)!=$stat["size"]) {
+            printf("fsc_load('/%s'): buffer length %d does not match cache file size %d\n",$path,$bl,filesize($cache_path));
+            return -FUSE_EIO;
+        }
+        
+        if(!isset($this->fs_cache["/".$path]))
+            $this->fs_cache["/".$path]=array("dirty"=>false,"stat"=>$stat,"fs"=>$cache_path);
+        return $this->fs_cache["/".$path];
+    }
+    
+    public function fsc_get($path,$offset,$length) {
+        if(substr($path,0,1)!="/")
+            $path="/".$path;
+        if(!isset($this->fs_cache[$path]))
+            return -FUSE_EIO;
+        $c=$this->fs_cache[$path];
+        $fp=fopen($c["fs"],"r");
+        if($fp===false)
+            return -FUSE_EIO;
+        $ret=fseek($fp,$offset);
+        if($ret===false)
+            return -FUSE_EIO;
+        $buf=fread($fp,$length);
+        if($buf===false)
+            return -FUSE_EIO;
+        if(strlen($buf)!=$length)
+            return -FUSE_EIO;
+        $ret=fclose($fp);
+        if($ret===false)
+            return -FUSE_EIO;
+        return $buf;
+    }
+    
+    public function fsc_is_dirty($path) {
+        if(substr($path,0,1)!="/")
+            $path="/".$path;
+        if(!isset($this->fs_cache[$path]))
+            return -FUSE_EIO;
+        return $this->fs_cache[$path]["dirty"];
+    }
     
     //open a file
     public function open($path, $mode) {
@@ -1417,8 +1511,15 @@ Options specific to %1\$s:
             return -FUSE_EACCES;
         }
         
+        if($this->use_fs_cache==true) {
+            $cache=$this->fsc_load($path);
+            if($cache<0)
+                return -FUSE_EIO;
+        } else
+            $cache=array();
+        
         $id=$this->next_handle_id++;
-        $handle=array("read"=>$want_read,"write"=>$want_write,"path"=>$path,"state"=>"open","id"=>$id,"stat"=>$stat);
+        $handle=array("read"=>$want_read,"write"=>$want_write,"path"=>$path,"state"=>"open","id"=>$id,"stat"=>$stat,"cache"=>$cache);
         $this->handles[$id]=$handle;
         
         if($this->debug)
@@ -1460,9 +1561,12 @@ Options specific to %1\$s:
             $ask_len=$end-$begin;
         }
         
-        $ret=$this->curl_get($path,$begin,$ask_len);
+        if($this->use_fs_cache)
+            $ret=$this->fsc_get($path,$offset,$ask_len);
+        else
+            $ret=$this->curl_get($path,$begin,$ask_len);
         
-        if($ret===-FUSE_EINVAL) {
+        if($ret<0) {
             printf("read('%s',%d): curl_get reported error\n",$path,$handle);
             return $ret;
         }
@@ -1551,8 +1655,10 @@ Options specific to %1\$s:
             return -FUSE_EBADF;
         }
         
-        $this->cache_invalidate(dirname($path));
-        $this->cache_invalidate($path);
+        if($this->fsc_is_dirty($path)) {
+            $this->cache_invalidate(dirname($path));
+            $this->cache_invalidate($path);
+        }
         
         if($this->debug)
             printf("flush('%s',%d): return 0\n",$path,$handle);
@@ -1572,8 +1678,10 @@ Options specific to %1\$s:
         
         unset($this->handles[$handle]);
         
-        $this->cache_invalidate(dirname($path));
-        $this->cache_invalidate($path);
+        if($this->fsc_is_dirty($path)) {
+            $this->cache_invalidate(dirname($path));
+            $this->cache_invalidate($path);
+        }
         
         if($this->debug)
             printf("release('%s',%d): return 0\n",$path,$handle);
