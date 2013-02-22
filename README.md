@@ -91,7 +91,7 @@ I am not sure about the legality of the names "php-fuse" and "php-ftpfs".
 
 ## Donations
 Liked php-ftpfs? Did it save your day? Tip me in BTC at
-<1C7aCo3V8yc4V53bm5q29pn5MJiRznFZCw>.
+"1C7aCo3V8yc4V53bm5q29pn5MJiRznFZCw".
 
 ## Contact
 Mail to marco@m-s-d.eu for questions.
