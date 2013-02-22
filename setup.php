@@ -88,8 +88,10 @@ if(is_dir($conf["bin-dir"])) {
 printf("Compiling PHP\n");
 if(is_file($scriptloc."php-src/Makefile"))
   setup_exec("cd ${scriptloc}php-src && make distclean");
+if(is_file($scriptloc."php-src/configure"))
+  setup_exec("cd ${scriptloc}php-src && rm configure");
 setup_exec("cd ${scriptloc}php-src && ./buildconf --force");
-setup_exec("cd ${scriptloc}php-src && ./configure --disable-all --enable-cli --disable-cgi --with-curl --enable-debug --enable-posix --enable-filter --prefix=".escapeshellarg($conf["bin-dir"]));
+setup_exec("cd ${scriptloc}php-src && PHP_PHAR=no ./configure --disable-all --enable-cli --with-curl --enable-debug --enable-posix --enable-filter --prefix=".escapeshellarg($conf["bin-dir"]));
 setup_exec("cd ${scriptloc}php-src && make clean");
 setup_exec("cd ${scriptloc}php-src && make -j ".$conf["make-cores"]);
 setup_exec("cd ${scriptloc}php-src && make install");
@@ -97,6 +99,8 @@ setup_exec("cd ${scriptloc}php-src && make install");
 printf("Compiling php-fuse\n");
 if(is_file($scriptloc."php-fuse/Makefile"))
   setup_exec("cd ${scriptloc}php-fuse && make distclean");
+if(is_file($scriptloc."php-fuse/configure"))
+  setup_exec("cd ${scriptloc}php-fuse && rm configure");
 setup_exec("cd ${scriptloc}php-fuse && ".str_replace(" ","\\ ",$conf["bin-dir"])."bin/phpize --clean");
 setup_exec("cd ${scriptloc}php-fuse && ".str_replace(" ","\\ ",$conf["bin-dir"])."bin/phpize");
 setup_exec("cd ${scriptloc}php-fuse && ./configure --with-php-config=".escapeshellarg($conf["bin-dir"]."bin/php-config"));
