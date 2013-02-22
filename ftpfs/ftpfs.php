@@ -701,7 +701,19 @@ Options specific to %1\$s:
             printf("MLSD result: '%s'\n",compact_pa($ret));        
         return $ret;
     }
-
+    
+    //remove all cached data for a file (except contents!)
+    public function cache_invalidate($path) {
+        if(substr($path,0,1)=="/")
+            $path=substr($path,1);
+        
+        $remotepath=$this->remotedir.$path;
+        if(isset($this->cache[$remotepath]))
+            unset($this->cache[$remotepath]);
+        
+        printf("Forcibly invalidated all caches for '%s'\n",$remotepath);
+    }
+    
     //get $len bytes of data from a file starting at $offset
     public function curl_get($path,$offset=0,$len=0) {
         if(substr($path,0,1)=="/")
@@ -944,6 +956,8 @@ Options specific to %1\$s:
         if($ret<0)
             return $ret;
         
+        $this->cache_invalidate(dirname($path));
+        
         //TODO: chmod
         
         //check if the given endpoint exists now
@@ -972,6 +986,8 @@ Options specific to %1\$s:
         if($ret<0)
             return $ret;
 
+        $this->cache_invalidate(dirname($path));
+        
         //TODO: chmod
         
         //check if the given endpoint exists now
@@ -1005,6 +1021,9 @@ Options specific to %1\$s:
         $ret=$this->curl_dele($path);
         if($ret<0)
             return $ret;
+        
+        $this->cache_invalidate(dirname($path));
+        $this->cache_invalidate($path);
 
         //check if the file doesn't exist
         $stat=$this->curl_mlst($path);
@@ -1045,6 +1064,9 @@ Options specific to %1\$s:
         if($ret<0)
             return $ret;
 
+        $this->cache_invalidate(dirname($path));
+        $this->cache_invalidate($path);
+        
         //check if the directory doesn't exist
         $stat=$this->curl_mlst($path);
         if($stat<0 && $stat!==-FUSE_ENOENT)
@@ -1096,6 +1118,11 @@ Options specific to %1\$s:
             return -FUSE_EEXIST;
         if($stat_from!==-FUSE_ENOENT)
             return $stat_from;
+        
+        $this->cache_invalidate(dirname($path_from));
+        $this->cache_invalidate($path_from);
+        $this->cache_invalidate(dirname($path_to));
+        $this->cache_invalidate($path_to);
         
         return 0;
     }
@@ -1185,7 +1212,10 @@ Options specific to %1\$s:
         if($length!=$stat_new["size"]) {
             printf("truncate('%s'): size mismatch: before %d, after %d\n",$path,$length,$stat_new["size"]);
             return -FUSE_EIO;
-        }        
+        }
+        
+        $this->cache_invalidate(dirname($path));
+        $this->cache_invalidate($path);
         
         if($this->debug)
             printf("truncate('%s',%d): return 0\n",$path,$length);
@@ -1259,6 +1289,9 @@ Options specific to %1\$s:
             printf("utime('%s'): size mismatch: before %d, after %d\n",$path,$stat["size"],$stat_new["size"]);
             return -FUSE_EIO;
         }
+        
+        $this->cache_invalidate(dirname($path));
+        $this->cache_invalidate($path);
         
         if($this->debug)
             printf("utime('%s'): return 0\n",$path);
@@ -1495,6 +1528,9 @@ Options specific to %1\$s:
         if($ret<0)
             return $ret;
         
+        $this->cache_invalidate(dirname($path));
+        $this->cache_invalidate($path);
+        
         if($this->debug)
             printf("write('%s',%d): return %d\n",$path,$handle,strlen($buf));
         return strlen($buf);
@@ -1515,6 +1551,9 @@ Options specific to %1\$s:
             return -FUSE_EBADF;
         }
         
+        $this->cache_invalidate(dirname($path));
+        $this->cache_invalidate($path);
+        
         if($this->debug)
             printf("flush('%s',%d): return 0\n",$path,$handle);
         return 0;
@@ -1532,6 +1571,9 @@ Options specific to %1\$s:
         }
         
         unset($this->handles[$handle]);
+        
+        $this->cache_invalidate(dirname($path));
+        $this->cache_invalidate($path);
         
         if($this->debug)
             printf("release('%s',%d): return 0\n",$path,$handle);
