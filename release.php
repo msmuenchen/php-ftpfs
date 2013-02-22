@@ -109,7 +109,7 @@ setup_exec("cd $tmploc && rm -rf .git");
 //php tests
 setup_exec("cd $tmploc && rm -rf `find php-src -type d -name \"tests\"`");
 //unneeded SAPIs
-setup_exec("cd ${tmploc}php-src && find sapi/* -maxdepth 0 -type d ! -name cli ! -name cgi -exec rm -rf {} +");
+setup_exec("cd ${tmploc}php-src && find sapi/* -maxdepth 0 -type d ! -name cli -exec rm -rf {} +");
 //all exts except required ones
 setup_exec("cd ${tmploc}php-src && find ext/* -maxdepth 0 -type d ! -name standard ! -name date ! -name curl ! -name posix ! -name filter ! -name ereg ! -name pcre ! -name reflection ! -name spl ! -name session -exec rm -rf {} +");
 //other platforms, utilities
