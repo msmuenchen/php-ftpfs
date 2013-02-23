@@ -114,6 +114,11 @@ logs! There is NO way for php-ftpfs to filter them out of the logs!
 File a pull request against the "msmuenchen" forks on GitHub. The original
 php-fuse from gree is no longer maintained!
 
+Please run `ln -s ../../pre-commit.php .git/hooks/pre-commit` after initial
+checkout so that you'll get notified in case your commit has syntax errors.
+
+Also, before committing, please run ./format-all.php to format the code nicely.
+
 ## License
 This software is licensed under the PHP license, see LICENSE file for details.
 
