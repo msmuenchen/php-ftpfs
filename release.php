@@ -115,7 +115,7 @@ if($in!="y" && $in!="")
   exit(1);
 
 //prepare temporary directory
-$tmploc="/tmp/php-ftpfs-release/";
+$tmploc="/tmp/php-ftpfs-$tagdesc/";
 if(is_dir($tmploc)) {
   printf("Removing old temp data\n");
   setup_exec("rm -rf $tmploc");
@@ -163,14 +163,14 @@ setup_exec("cd ${tmploc}php-src && find ext/* -maxdepth 0 -type d ! -name standa
 setup_exec("cd ${tmploc}php-src && find . -maxdepth 1 -type d \\( -name travis -or -name pear -or -name win32 -or -name autom4te.cache -or -name netware \\) -exec rm -rf {} +");
 
 //write version identifier
-$buf=file_get_contents("${tmploc}/ftpfs/ftpfs.php");
+$buf=file_get_contents("${tmploc}ftpfs/ftpfs.php");
 $buf=preg_replace('@git-\\$Id\\$@isU',"git-$tagdesc",$buf);
 $buf=preg_replace('@git-\\$Id(.*)\\$@isU',"git-$tagdesc",$buf);
-$fp=fopen("${tmploc}/ftpfs/ftpfs.php","w");
+$fp=fopen("${tmploc}ftpfs/ftpfs.php","w");
 fwrite($fp,$buf);
 fclose($fp);
 
 //pack the whole thing together
-setup_exec("cd / && tar -czf ".escapeshellarg($conf["outfile"])." $tmploc");
+setup_exec("cd ${tmploc}../ && tar -czf ".escapeshellarg($conf["outfile"])." ".escapeshellarg(basename($tmploc)));
 
 printf("Finished output file now in %s\n",$conf["outfile"]);
