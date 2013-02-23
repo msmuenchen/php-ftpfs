@@ -144,6 +144,12 @@ if(!is_file($tmploc."php-fuse/README") || !is_file($tmploc."php-src/README.md"))
   setup_exec("cd $tmploc && git submodule update");
 }
 
+//clean up stuff in the submodules
+setup_exec("cd $tmploc/php-fuse && git clean -f -d -x");
+setup_exec("cd $tmploc/php-fuse && git reset --hard HEAD");
+setup_exec("cd $tmploc/php-src && git clean -f -d -x");
+setup_exec("cd $tmploc/php-src && git reset --hard HEAD");
+
 //clean up from builds
 if(is_file($tmploc."php-src/Makefile"))
   setup_exec("cd ${tmploc}php-src && make distclean");
