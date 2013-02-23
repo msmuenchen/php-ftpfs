@@ -16,7 +16,6 @@ class PHPFTPFS extends Fuse {
     public $host="localhost";
     public $user="anonymous";
     public $pass="user@example.com";
-    public $pasv=false;
     public $dataport=20;
     public $controlport=21;
     public $remotedir="/";
@@ -47,7 +46,6 @@ class PHPFTPFS extends Fuse {
             "KEY_PASSWORD",
             "KEY_CACHE_MAXAGE",
             "KEY_CONTROLPORT",
-            "KEY_PASV",
             "KEY_REMOTEDIR",
             "KEY_ENABLE_IPV6",
             "KEY_CACHE_DIR",
@@ -69,7 +67,6 @@ class PHPFTPFS extends Fuse {
             "ftp_password " => $this->opt_keys["KEY_PASSWORD"],
             "cache_maxage " => $this->opt_keys["KEY_CACHE_MAXAGE"],
             "controlport " => $this->opt_keys["KEY_CONTROLPORT"],
-            "pasv" => $this->opt_keys["KEY_PASV"],
             "remotedir " => $this->opt_keys["KEY_REMOTEDIR"],
             "ipv6" => $this->opt_keys["KEY_ENABLE_IPV6"],
             "cache_dir " => $this->opt_keys["KEY_CACHE_DIR"],
@@ -281,10 +278,6 @@ Options specific to %1\$s:
                 break;
             case $this->opt_keys["KEY_PASSWORD"]:
                 $this->pass=substr($arg,strlen("ftp_password")+1);
-                return 0;
-                break;
-            case $this->opt_keys["KEY_PASV"]:
-                $this->pasv=true;
                 return 0;
                 break;
             case $this->opt_keys["KEY_CACHE_DIR"]:
