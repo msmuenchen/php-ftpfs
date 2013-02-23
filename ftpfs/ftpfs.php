@@ -1399,7 +1399,8 @@ Options specific to %1\$s:
             return -FUSE_EIO;
         
         if (isset($this->fs_cache[$path]) && $force === false) {
-            printf("fsc_load('%s'): skipping GET, already have file in cache at %s\n", $path, $this->fs_cache[$path]["fs"]);
+            if($this->debug)
+                printf("fsc_load('%s'): skipping GET, already have file in cache at %s\n", $path, $this->fs_cache[$path]["fs"]);
             return $this->fs_cache[$path];
         }
         
