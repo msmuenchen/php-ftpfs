@@ -1581,6 +1581,70 @@ Options specific to %1\$s:
         //update stat
         $c["stat"]["modify"] = time();
         $c["stat"]["size"]   = $ns;
+        if ($this->debug)
+            printf("fsc_put('%s'): using '%s', now %d bytes huge, mtime=%d (%s), ns=%d\n",$path,$c["fs"],$c["stat"]["size"],$c["stat"]["modify"],date("d.m.Y H:i:s",$c["stat"]["modify"]),$ns);
+        return 0;
+    }
+    
+    public function fsc_truncate($path,$length) {
+        if (substr($path, 0, 1) != "/")
+            $path = "/" . $path;
+        //are the metadata in RAM?
+        if (!isset($this->fs_cache[$path])) {
+            $ret=$this->fsc_load($path);
+            if($ret<0)
+                return $ret;
+        }
+        $c =& $this->fs_cache[$path];
+        if ($c["dirty"] === false) {
+            if($this->debug)
+                printf("fsc_truncate('%s'): marking as dirty\n", $path);
+            $c["dirty"] = true;
+            $fs_clean   = $c["fs"];
+            $fs_dirty   = $c["fs"] . "-dirty";
+            $ret        = copy($fs_clean, $fs_dirty);
+            if ($ret === false) {
+                printf("fsc_truncate('%s'): can't copy %s to %s\n", $path, $fs_clean, $fs_dirty);
+                return -FUSE_EIO;
+            }
+            $c["fs"] = $fs_dirty;
+        } else {
+            if($this->debug)
+                printf("fsc_truncate('%s'): file is marked as dirty\n", $path);
+        }
+        if ($this->debug)
+            printf("fsc_truncate('%s'): using %s as cachefile\n", $path, $c["fs"]);
+        
+        $fp = fopen($c["fs"], "c");
+        if ($fp === false) {
+            printf("fsc_truncate('%s'): fopen on %s failed\n", $path, $c["fs"]);
+            return -FUSE_EIO;
+        }
+        $ret = ftruncate($fp, $length);
+        if ($ret === false) {
+            printf("fsc_truncate('%s'): fwrite on %s failed\n", $path, $c["fs"]);
+            return -FUSE_EIO;
+        }
+        $ret = fclose($fp);
+        if ($ret === false) {
+            printf("fsc_truncate('%s'): fclose on %s failed\n", $path, $c["fs"]);
+            return -FUSE_EIO;
+        }
+
+        clearstatcache(); //clear stat cache for correct filesize info
+        
+        $ns = filesize($c["fs"]);
+        if ($ns === false) {
+            printf("fsc_truncate('%s'): filesize on %s failed\n", $path, $c["fs"]);
+            return -FUSE_EIO;
+        } elseif($ns!=$length) {
+            printf("fsc_truncate('%s'): ftruncate on %s failed, length mismatch\n", $path, $c["fs"]);
+            return -FUSE_EIO;
+        }
+        
+        //update stat
+        $c["stat"]["modify"] = time();
+        $c["stat"]["size"]   = $ns;
         return 0;
     }
     
