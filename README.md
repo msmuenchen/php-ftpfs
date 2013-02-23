@@ -55,9 +55,17 @@ even on high-variable sites and something around 1800-3600 if you're the only
 user on the site (like when you're on a web server).
 
 ### File contents
-Currently, file contents are not cached. Eventually they will be, though,
-with the index being the filename and the mtime of the file (this is why the
-mtime is important!).
+If you specified -o cache_dir=/path/to/dir (relative paths UNTESTED), then
+php-ftpfs will create a subdirectory for each connection using this cache dir.
+It is suggested that you only use one cache_dir for all your ftpfs mounts.
+
+The files are named by their pathname, followed by the mtime and the file size,
+separated with the underscore symbol.
+
+Files ending in -dirty are files for which a handle has been opened and stuff
+has been written to it, but flush() or release haven't been called yet.
+
+!!! NEVER EVER DELETE ANYTHING IN THE CACHE DIRECTORY WHEN PHP-FTPFS IS RUNNING !!!
 
 ## Caveats
 On 32-bit systems, you WILL encounter problems with files larger than 2GB,
@@ -100,7 +108,7 @@ logs! There is NO way for php-ftpfs to filter them out of the logs!
 2. Support servers using only LIST instead of MLS(D/T)
 3. Get a filesystem test suite and run it to verify php-ftpfs.
 4. Use a metadata cache (done)
-5. Use a file cache
+5. Use a file cache (done)
 
 ## Contribute
 File a pull request against the "msmuenchen" forks on GitHub. The original
