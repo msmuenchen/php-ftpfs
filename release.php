@@ -98,7 +98,15 @@ $scriptloc=realpath(dirname(__FILE__))."/";
 if(substr($conf["outfile"],0,1)!="/") //relative path
   $conf["outfile"]=truepath($scriptloc.$conf["outfile"]);
 
-printf("Creating a snapshot file in %s for branch/tag %s\n",$conf["outfile"],$conf["tag"]);
+//get the tag description
+if($conf["create-tag"])
+  $tagdesc=$conf["tag"];
+else {
+  $tagdesc=setup_exec("cd $scriptloc && git describe --tags --always ".escapeshellarg($conf["tag"]),true); $tagdesc=$tagdesc[0];
+}
+$outfile_tmp=str_replace("%d",$tagdesc,$conf["outfile"]);
+
+printf("Creating a snapshot file in %s for branch/tag %s (description: '%s')\n",$outfile_tmp,$conf["tag"],$tagdesc);
 if($conf["create-tag"]==true)
   printf("Creating tag with message '%s'\n",$conf["message"]);
 printf("Continue ([y]/n)? ");
@@ -116,6 +124,9 @@ if(is_dir($tmploc)) {
 //create the tag
 if($conf["create-tag"])
   setup_exec("cd $scriptloc && git tag -a ".escapeshellarg($conf["tag"])." -m ".escapeshellarg($conf["message"]));
+
+$tagdesc=setup_exec("cd $scriptloc && git describe --tags --always ".escapeshellarg($conf["tag"]),true); $tagdesc=$tagdesc[0];
+$conf["outfile"]=str_replace("%d",$tagdesc,$conf["outfile"]);
 
 //clone the repository and clean it up
 //setup_exec("cd $scriptloc && git clone --no-hardlinks $scriptloc $tmploc");
@@ -138,11 +149,6 @@ if(is_file($tmploc."php-src/Makefile"))
   setup_exec("cd ${tmploc}php-src && make distclean");
 if(is_file($tmploc."php-fuse/Makefile"))
   setup_exec("cd ${tmploc}php-fuse && make distclean");
-
-//get the tag description
-$tagdesc=setup_exec("cd $tmploc && git describe --tags --always",true); $tagdesc=$tagdesc[0];
-printf("Tag description is '%s'\n",$tagdesc);
-$conf["outfile"]=str_replace("%d",$tagdesc,$conf["outfile"]);
 
 //remove unneeded directories to clean up space
 //git history
