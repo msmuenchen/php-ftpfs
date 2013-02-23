@@ -1221,11 +1221,26 @@ Options specific to %1\$s:
         //Nothing to do here?
         if ($stat["size"] == $length)
             return 0;
-        if (isset($this->fs_count[$path]) && $this->fs_count[$path] > 0) {
-            printf("truncate('%s'): File busy, %d open handles\n", $path, $this->fs_count[$path]);
-            return -FUSE_EBUSY;
-        }
         
+        if($this->use_fs_cache) {
+            $ret=$this->fsc_truncate($path,$length);
+            if($ret<0) {
+                printf("truncate('%s'): fsc_truncate reported error\n",$path);
+                return $ret;
+            }
+            //do not flush if there's a handle open - flush()/release() will do that once the handle gets closed
+            if(!isset($this->fs_count[$path]) || $this->fs_count[$path]==0) {
+                $ret=$this->fsc_flush($path);
+                if($ret<0) {
+                    printf("truncate('%s'): fsc_flush reported error\n",$path);
+                    return $ret;
+                }
+            } else {
+                if($this->debug)
+                    printf("truncate('%s'): skipped fsc_flush\n",$path);
+            }
+            return 0;
+        }
         //do we need to preserve content?
         if ($length > 0) {
             $buf = $this->curl_get($path, 0, $stat["size"]);
