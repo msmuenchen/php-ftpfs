@@ -14,7 +14,7 @@ you with a FTP-served filesystem.
 * all build dependencies of bare PHP, additionally needed are libfuse-dev and
   libcurl-dev
 * Non-snapshot or non-release builds will require git.
-* Around 200MB of free disk space for git builds (the PHP source is huge)
+* Around 100MB of free disk space for the build, 20-30MB for the install
 
 ## Install
 Either clone the repository from https://github.com/msmuenchen/php-ftpfs.git
