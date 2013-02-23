@@ -1422,7 +1422,7 @@ Options specific to %1\$s:
             $path = substr($path, 1);
         
         //write the file to cache
-        $cache_path = $this->cache_dir . $path . "_" . $stat["size"] . "_" . $stat["modify"];
+        $cache_path = $this->cache_dir . $path . "_"  . $stat["modify"] . "_" . $stat["size"];
         
         //create subdir levels
         $cache_dir = dirname($cache_path);
