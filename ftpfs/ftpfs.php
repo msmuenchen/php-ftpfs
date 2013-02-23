@@ -1813,6 +1813,10 @@ Options specific to %1\$s:
             $ask_len = $end - $begin;
         }
         
+        if($ask_len==0) {
+            return 0; //nothing to do here
+        }
+        
         if ($this->use_fs_cache)
             $ret = $this->fsc_get($path, $offset, $ask_len);
         else
