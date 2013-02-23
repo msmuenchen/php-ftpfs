@@ -1682,16 +1682,26 @@ Options specific to %1\$s:
         }
         $this->cache_invalidate($path);
         $c["dirty"] = false;
-        $ret        = $this->fsc_load($path, true);
-        if ($ret < 0) {
-            printf("fsc_flush('%s'): fsc_load failed\n");
+        
+        $stat=$this->curl_mlst($path);
+        if($stat<0) {
+            printf("fsc_flush('%s'): MLST on flushed resource failed\n",$path);
             return -FUSE_EIO;
         }
-        if ($this->fs_cache[$path]["stat"]["size"] != $clen) {
-            printf("fsc_flush('%s'): fsc_load reported size mismatch, should be %d, is %d\n",$path,$clen,$this->fs_cache[$path]["stat"]["size"]);
+        if ($stat["size"] != $clen) {
+            printf("fsc_flush('%s'): MLST reported size mismatch, should be %d, is %d\n",$path,$clen,$this->fs_cache[$path]["stat"]["size"]);
             return -FUSE_EIO;
         }
-        printf("fsc_flush('%s'): wrote back changes\n", $path);
+        $fs_new=$this->cache_dir . substr($path,1) . "_"  . $stat["modify"] . "_" . $stat["size"];
+        $fs_old=$c["fs"];
+        $ret=rename($fs_old,$fs_new);
+        if($ret===false) {
+            printf("fsc_flush('%s'): could not rename '%s' to '%s'\n",$path,$fs_old,$fs_new);
+            return -FUSE_EIO;
+        }
+        $this->fs_cache[$path]=array("fs"=>$fs_new,"stat"=>$stat,"dirty"=>false);
+        if($this->debug)
+            printf("fsc_flush('%s'): wrote back changes\n", $path);
         return 0;
     }
     
