@@ -1410,6 +1410,9 @@ Options specific to %1\$s:
             if ($ret === false)
                 return -FUSE_EIO;
         }
+
+        clearstatcache(); //clear stat cache for correct filesize info
+
         if (is_file($cache_path) && filesize($cache_path) == $stat["size"]) {
             printf("fsc_load('/%s'): cache file %s already present\n", $path, $cache_path);
             if (!isset($this->fs_cache["/" . $path]))
@@ -1429,6 +1432,8 @@ Options specific to %1\$s:
         $ret = fclose($fp);
         if ($ret === false)
             return -FUSE_EIO;
+        
+        clearstatcache(); //clear stat cache for correct filesize info
         
         if (filesize($cache_path) != $stat["size"]) {
             printf("fsc_load('/%s'): buffer length %d does not match cache file size %d\n", $path, $bl, filesize($cache_path));
@@ -1482,6 +1487,9 @@ Options specific to %1\$s:
             printf("fsc_get('%s'): fclose on %s failed\n", $path, $c["fs"]);
             return -FUSE_EIO;
         }
+        
+        clearstatcache(); //clear stat cache for correct filesize info
+        
         return $buf;
     }
     
@@ -1525,11 +1533,18 @@ Options specific to %1\$s:
             printf("fsc_put('%s'): fwrite on %s failed\n", $path, $c["fs"]);
             return -FUSE_EIO;
         }
+        $ret = fflush($fp);
+        if ($ret === false) {
+            printf("fsc_put('%s'): fflush on %s failed\n", $path, $c["fs"]);
+            return -FUSE_EIO;
+        }
         $ret = fclose($fp);
         if ($ret === false) {
             printf("fsc_put('%s'): fclose on %s failed\n", $path, $c["fs"]);
             return -FUSE_EIO;
         }
+        
+        clearstatcache(); //clear stat cache for correct filesize info
         
         $ns = filesize($c["fs"]);
         if ($ns === false) {
@@ -1582,7 +1597,7 @@ Options specific to %1\$s:
             return -FUSE_EIO;
         }
         if ($this->fs_cache[$path]["stat"]["size"] != $clen) {
-            printf("fsc_flush('%s'): fsc_load reported size mismatch\n");
+            printf("fsc_flush('%s'): fsc_load reported size mismatch, should be %d, is %d\n",$path,$clen,$this->fs_cache[$path]["stat"]["size"]);
             return -FUSE_EIO;
         }
         printf("fsc_flush('%s'): wrote back changes\n", $path);
