@@ -131,7 +131,7 @@ $conf["outfile"]=str_replace("%d",$tagdesc,$conf["outfile"]);
 //clone the repository and clean it up
 //setup_exec("cd $scriptloc && git clone --no-hardlinks $scriptloc $tmploc");
 setup_exec("cd / && cp -R $scriptloc $tmploc");
-setup_exec("cd $tmploc && git clean -f -d -x -n");
+setup_exec("cd $tmploc && git clean -f -d -x");
 setup_exec("cd $tmploc && git reset --hard HEAD");
 
 //check out the tag, branch or commit id
