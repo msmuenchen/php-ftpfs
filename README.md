@@ -111,8 +111,8 @@ logs! There is NO way for php-ftpfs to filter them out of the logs!
 5. Use a file cache (done)
 
 ## Contribute
-File a pull request against the "msmuenchen" forks on GitHub. The original
-php-fuse from gree is no longer maintained!
+Just fork and file a pull request, or file an issue and upload a patch, or just
+file the issue. I'm happy with everything.
 
 Please run `ln -s ../../pre-commit.php .git/hooks/pre-commit` after initial
 checkout so that you'll get notified in case your commit has syntax errors.
