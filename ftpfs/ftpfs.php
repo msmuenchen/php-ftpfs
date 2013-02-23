@@ -630,7 +630,7 @@ Options specific to %1\$s:
         
         //see if we have dirty data in the fscache, which overrides metadata cache and "real" ftp info
         if ($this->use_fs_cache && isset($this->fs_cache["/$path"]) && $this->fs_cache["/$path"]["dirty"] === true) {
-            if($this->debug)
+            if ($this->debug)
                 printf("MLST /%s: file marked as dirty in fscache, serving modified results\n", $path);
             return $this->fs_cache["/$path"]["stat"];
         }
@@ -639,10 +639,10 @@ Options specific to %1\$s:
         if ($allow_cache == true && $this->cache_maxage > 0 && isset($this->cache[$abspath]) && isset($this->cache[$abspath]["mlst"])) {
             if (time() - $this->cache[$abspath]["mlst"]["time"] > $this->cache_maxage) {
                 unset($this->cache[$abspath]["mlst"]);
-                if($this->debug)
+                if ($this->debug)
                     printf("Invalidated MLST cache for '%s' due to timeout\n", $abspath);
             } else {
-                if($this->debug)
+                if ($this->debug)
                     printf("Serving MLST for '%s' out of cache\n", $abspath);
                 return $this->cache[$abspath]["mlst"]["data"];
             }
@@ -700,10 +700,10 @@ Options specific to %1\$s:
         if ($allow_cache == true && $this->cache_maxage > 0 && isset($this->cache[$remotepath]) && isset($this->cache[$remotepath]["mlsd"])) {
             if (time() - $this->cache[$remotepath]["mlsd"]["time"] > $this->cache_maxage) {
                 unset($this->cache[$remotepath]["mlsd"]);
-                if($this->debug)
+                if ($this->debug)
                     printf("Invalidated MLSD cache for '%s'\n", $remotepath);
             } else {
-                if($this->debug)
+                if ($this->debug)
                     printf("Serving MLSD for '%s' out of cache\n", $remotepath);
                 return $this->cache[$remotepath]["mlsd"]["data"];
             }
@@ -761,7 +761,7 @@ Options specific to %1\$s:
         if (isset($this->cache[$remotepath]))
             unset($this->cache[$remotepath]);
         
-        if($this->debug)
+        if ($this->debug)
             printf("Forcibly invalidated all caches for '%s'\n", $remotepath);
     }
     
@@ -1222,22 +1222,22 @@ Options specific to %1\$s:
         if ($stat["size"] == $length)
             return 0;
         
-        if($this->use_fs_cache) {
-            $ret=$this->fsc_truncate($path,$length);
-            if($ret<0) {
-                printf("truncate('%s'): fsc_truncate reported error\n",$path);
+        if ($this->use_fs_cache) {
+            $ret = $this->fsc_truncate($path, $length);
+            if ($ret < 0) {
+                printf("truncate('%s'): fsc_truncate reported error\n", $path);
                 return $ret;
             }
             //do not flush if there's a handle open - flush()/release() will do that once the handle gets closed
-            if(!isset($this->fs_count[$path]) || $this->fs_count[$path]==0) {
-                $ret=$this->fsc_flush($path);
-                if($ret<0) {
-                    printf("truncate('%s'): fsc_flush reported error\n",$path);
+            if (!isset($this->fs_count[$path]) || $this->fs_count[$path] == 0) {
+                $ret = $this->fsc_flush($path);
+                if ($ret < 0) {
+                    printf("truncate('%s'): fsc_flush reported error\n", $path);
                     return $ret;
                 }
             } else {
-                if($this->debug)
-                    printf("truncate('%s'): skipped fsc_flush\n",$path);
+                if ($this->debug)
+                    printf("truncate('%s'): skipped fsc_flush\n", $path);
             }
             return 0;
         }
@@ -1422,22 +1422,22 @@ Options specific to %1\$s:
             $path = substr($path, 1);
         
         //write the file to cache
-        $cache_path = $this->cache_dir . $path . "_"  . $stat["modify"] . "_" . $stat["size"];
+        $cache_path = $this->cache_dir . $path . "_" . $stat["modify"] . "_" . $stat["size"];
         
         //create subdir levels
         $cache_dir = dirname($cache_path);
-        if($this->debug)
+        if ($this->debug)
             printf("cache dir for file %s is %s\n", $cache_path, $cache_dir);
         if (!is_dir($cache_dir)) {
             $ret = mkdir($cache_dir, 0777, true);
             if ($ret === false)
                 return -FUSE_EIO;
         }
-
+        
         clearstatcache(); //clear stat cache for correct filesize info
-
+        
         if (is_file($cache_path) && filesize($cache_path) == $stat["size"]) {
-            if($this->debug)
+            if ($this->debug)
                 printf("fsc_load('/%s'): cache file %s already present\n", $path, $cache_path);
             if (!isset($this->fs_cache["/" . $path]))
                 $this->fs_cache["/" . $path] = array(
@@ -1487,7 +1487,7 @@ Options specific to %1\$s:
         }
         $c = $this->fs_cache[$path];
         
-        if($this->debug)
+        if ($this->debug)
             printf("fsc_get('%s'): using %s as cachefile\n", $path, $c["fs"]);
         $fp = fopen($c["fs"], "r");
         if ($fp === false) {
@@ -1582,22 +1582,22 @@ Options specific to %1\$s:
         $c["stat"]["modify"] = time();
         $c["stat"]["size"]   = $ns;
         if ($this->debug)
-            printf("fsc_put('%s'): using '%s', now %d bytes huge, mtime=%d (%s), ns=%d\n",$path,$c["fs"],$c["stat"]["size"],$c["stat"]["modify"],date("d.m.Y H:i:s",$c["stat"]["modify"]),$ns);
+            printf("fsc_put('%s'): using '%s', now %d bytes huge, mtime=%d (%s), ns=%d\n", $path, $c["fs"], $c["stat"]["size"], $c["stat"]["modify"], date("d.m.Y H:i:s", $c["stat"]["modify"]), $ns);
         return 0;
     }
     
-    public function fsc_truncate($path,$length) {
+    public function fsc_truncate($path, $length) {
         if (substr($path, 0, 1) != "/")
             $path = "/" . $path;
         //are the metadata in RAM?
         if (!isset($this->fs_cache[$path])) {
-            $ret=$this->fsc_load($path);
-            if($ret<0)
+            $ret = $this->fsc_load($path);
+            if ($ret < 0)
                 return $ret;
         }
         $c =& $this->fs_cache[$path];
         if ($c["dirty"] === false) {
-            if($this->debug)
+            if ($this->debug)
                 printf("fsc_truncate('%s'): marking as dirty\n", $path);
             $c["dirty"] = true;
             $fs_clean   = $c["fs"];
@@ -1609,7 +1609,7 @@ Options specific to %1\$s:
             }
             $c["fs"] = $fs_dirty;
         } else {
-            if($this->debug)
+            if ($this->debug)
                 printf("fsc_truncate('%s'): file is marked as dirty\n", $path);
         }
         if ($this->debug)
@@ -1630,14 +1630,14 @@ Options specific to %1\$s:
             printf("fsc_truncate('%s'): fclose on %s failed\n", $path, $c["fs"]);
             return -FUSE_EIO;
         }
-
+        
         clearstatcache(); //clear stat cache for correct filesize info
         
         $ns = filesize($c["fs"]);
         if ($ns === false) {
             printf("fsc_truncate('%s'): filesize on %s failed\n", $path, $c["fs"]);
             return -FUSE_EIO;
-        } elseif($ns!=$length) {
+        } elseif ($ns != $length) {
             printf("fsc_truncate('%s'): ftruncate on %s failed, length mismatch\n", $path, $c["fs"]);
             return -FUSE_EIO;
         }
@@ -1672,7 +1672,7 @@ Options specific to %1\$s:
         $clen    = $c["stat"]["size"];
         $content = file_get_contents($c["fs"]);
         if ($content === false) {
-            printf("fsc_flush('%s'): file_get_contents failed\n",$path);
+            printf("fsc_flush('%s'): file_get_contents failed\n", $path);
             return -FUSE_EIO;
         }
         $ret = $this->curl_put($path, 0, $content);
@@ -1683,24 +1683,28 @@ Options specific to %1\$s:
         $this->cache_invalidate($path);
         $c["dirty"] = false;
         
-        $stat=$this->curl_mlst($path);
-        if($stat<0) {
-            printf("fsc_flush('%s'): MLST on flushed resource failed\n",$path);
+        $stat = $this->curl_mlst($path);
+        if ($stat < 0) {
+            printf("fsc_flush('%s'): MLST on flushed resource failed\n", $path);
             return -FUSE_EIO;
         }
         if ($stat["size"] != $clen) {
-            printf("fsc_flush('%s'): MLST reported size mismatch, should be %d, is %d\n",$path,$clen,$this->fs_cache[$path]["stat"]["size"]);
+            printf("fsc_flush('%s'): MLST reported size mismatch, should be %d, is %d\n", $path, $clen, $this->fs_cache[$path]["stat"]["size"]);
             return -FUSE_EIO;
         }
-        $fs_new=$this->cache_dir . substr($path,1) . "_"  . $stat["modify"] . "_" . $stat["size"];
-        $fs_old=$c["fs"];
-        $ret=rename($fs_old,$fs_new);
-        if($ret===false) {
-            printf("fsc_flush('%s'): could not rename '%s' to '%s'\n",$path,$fs_old,$fs_new);
+        $fs_new = $this->cache_dir . substr($path, 1) . "_" . $stat["modify"] . "_" . $stat["size"];
+        $fs_old = $c["fs"];
+        $ret    = rename($fs_old, $fs_new);
+        if ($ret === false) {
+            printf("fsc_flush('%s'): could not rename '%s' to '%s'\n", $path, $fs_old, $fs_new);
             return -FUSE_EIO;
         }
-        $this->fs_cache[$path]=array("fs"=>$fs_new,"stat"=>$stat,"dirty"=>false);
-        if($this->debug)
+        $this->fs_cache[$path] = array(
+            "fs" => $fs_new,
+            "stat" => $stat,
+            "dirty" => false
+        );
+        if ($this->debug)
             printf("fsc_flush('%s'): wrote back changes\n", $path);
         return 0;
     }
@@ -1887,7 +1891,7 @@ Options specific to %1\$s:
             $ask_len = $end - $begin;
         }
         
-        if($ask_len==0) {
+        if ($ask_len == 0) {
             return 0; //nothing to do here
         }
         
