@@ -101,8 +101,8 @@ class PHPFTPFS extends Fuse {
                     printf("Using IPv6 where available\n");
                 if ($this->cache_dir != "")
                     printf("Using '%s' as cache directory\n", $this->cache_dir);
-                if($this->cache_maxage>0)
-                    printf("Using metadata cache with maximum age %d seconds\n",$this->cache_maxage);
+                if ($this->cache_maxage > 0)
+                    printf("Using metadata cache with maximum age %d seconds\n", $this->cache_maxage);
             }
             
             //Assemble the URL
@@ -1399,7 +1399,7 @@ Options specific to %1\$s:
             return -FUSE_EIO;
         
         if (isset($this->fs_cache[$path]) && $force === false) {
-            if($this->debug)
+            if ($this->debug)
                 printf("fsc_load('%s'): skipping GET, already have file in cache at %s\n", $path, $this->fs_cache[$path]["fs"]);
             return $this->fs_cache[$path];
         }
