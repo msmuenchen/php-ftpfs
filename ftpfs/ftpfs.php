@@ -33,7 +33,8 @@ class PHPFTPFS extends Fuse {
     private $fs_cache=array();
     private $curl=NULL;
     private $handles=array(); //keep track of the handles returned by open() here
-    private $next_handle_id=1; //do not let phpftpfs run too long, this can overflow!
+    private $next_handle_id=1;
+    private $fs_count=array(); //keep track of opened files here
     
     public function __construct() {
         $this->opt_keys = array_flip(array(
@@ -1006,6 +1007,10 @@ Options specific to %1\$s:
         if($stat<0)
             return $stat;
         
+        if(isset($this->fs_count[$path]) && $this->fs_count[$path]>0)
+            printf("unlink('%s'): File busy, %d open handles\n",$path,$this->fs_count[$path]);
+            return -FUSE_EBUSY;
+        }
         if(!isset($stat["perm"]["d"])) {
             printf("unlink('%s'): DELE permission not set\n",$path);
             return -FUSE_EACCES;
@@ -1097,6 +1102,10 @@ Options specific to %1\$s:
             return -FUSE_EEXIST;
         if($stat_to!==-FUSE_ENOENT)
             return $stat_to;
+        if(isset($this->fs_count[$path_from]) && $this->fs_count[$path_from]>0)
+            printf("rename('%s','%s'): File busy, %d open handles\n",$path_from,$path_to,$this->fs_count[$path_from]);
+            return -FUSE_EBUSY;
+        }
         
         //do the rename
         $ret=$this->curl_rename($path_from, $path_to);
@@ -1149,6 +1158,10 @@ Options specific to %1\$s:
         //Nothing to do here?
         if($stat["size"]==$length)
             return 0;
+        if(isset($this->fs_count[$path]) && $this->fs_count[$path]>0)
+            printf("truncate('%s'): File busy, %d open handles\n",$path,$this->fs_count[$path]);
+            return -FUSE_EBUSY;
+        }
         
         //do we need to preserve content?
         if($length>0) {
@@ -1236,6 +1249,11 @@ Options specific to %1\$s:
 
         if($stat["type"]=="dir")
             return -FUSE_EISDIR;
+        
+        if(isset($this->fs_count[$path]) && $this->fs_count[$path]>0)
+            printf("utime('%s'): File busy, %d open handles\n",$path,$this->fs_count[$path]);
+            return -FUSE_EBUSY;
+        }
         
         $buf=$this->curl_get($path,0,$stat["size"]);
         if($buf<0)
@@ -1515,6 +1533,11 @@ Options specific to %1\$s:
         $handle=array("read"=>$want_read,"write"=>$want_write,"path"=>$path,"state"=>"open","id"=>$id,"stat"=>$stat,"cache"=>$cache);
         $this->handles[$id]=$handle;
         
+        if(isset($this->fs_count[$path]))
+            $this->fs_count[$path]++;
+        else
+            $this->fs_count[$path]=1;
+        
         if($this->debug)
             printf("open('%s'): returning handle %d\n",$path,$id);
         return $id;
@@ -1676,6 +1699,7 @@ Options specific to %1\$s:
             $this->cache_invalidate($path);
         }
         
+        $this->fs_count[$path]--;
         if($this->debug)
             printf("release('%s',%d): return 0\n",$path,$handle);
         return 0;
