@@ -97,12 +97,12 @@ class PHPFTPFS extends Fuse {
         if ($this->run_ftpfs) {
             if ($this->debug) {
                 printf("Opening connection to ftp://%s:%s@%s:%d%s\n", $this->user, $this->pass, $this->host, $this->controlport, $this->remotedir);
-                if ($this->pasv)
-                    printf("Using passive transfer\n");
                 if ($this->ipv6)
                     printf("Using IPv6 where available\n");
                 if ($this->cache_dir != "")
-                    printf("Using '%s' as cache directory, maximum age=%d seconds\n", $this->cache_dir, $this->cache_maxage);
+                    printf("Using '%s' as cache directory\n", $this->cache_dir);
+                if($this->cache_maxage>0)
+                    printf("Using metadata cache with maximum age %d seconds\n",$this->cache_maxage);
             }
             
             //Assemble the URL
