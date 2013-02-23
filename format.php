@@ -27,6 +27,8 @@ if (!isset($argv[1])) {
     exit(1);
 }
 
+printf("Formatting and validating %s\n", $argv[1]);
+
 //get the code
 $content = file_get_contents($argv[1]);
 if ($content === false) {
