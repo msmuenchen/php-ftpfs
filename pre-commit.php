@@ -25,8 +25,6 @@ $scriptloc = realpath(dirname(__FILE__)) . "/";
 //backup uncommitted stuff
 setup_exec("cd " . escapeshellarg($scriptloc) . " && git stash --keep-index -u");
 
-print_r(setup_exec("cd " . escapeshellarg($scriptloc) . " && git status --porcelain", true));
-
 //format and check code
 $exit = 0;
 try {
