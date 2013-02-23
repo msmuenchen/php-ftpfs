@@ -590,10 +590,17 @@ Options specific to %1\$s:
         if($this->debug)
             printf("Requesting cURL MLST from base '%s' / path '%s' / abspath '%s'\n",$this->base_url,$path,$abspath);
         
+        //see if we have dirty data in the fscache, which overrides metadata cache and "real" ftp info
+        if($this->use_fs_cache && isset($this->fs_cache["/$path"]) && $this->fs_cache["/$path"]["dirty"]===true) {
+            printf("MLST /%s: file marked as dirty in fscache, serving modified results\n",$path);
+            return $this->fs_cache["/$path"]["stat"];
+        }
+        
+        //see if we have valid data in the metadata cache
         if($allow_cache==true && $this->cache_maxage>0 && isset($this->cache[$abspath]) && isset($this->cache[$abspath]["mlst"])) {
             if(time()-$this->cache[$abspath]["mlst"]["time"]>$this->cache_maxage) {
                 unset($this->cache[$abspath]["mlst"]);
-                printf("Invalidated MLST cache for '%s'\n",$abspath);
+                printf("Invalidated MLST cache for '%s' due to timeout\n",$abspath);
             } else  {
                 printf("Serving MLST for '%s' out of cache\n",$abspath);
                 return $this->cache[$abspath]["mlst"]["data"];
@@ -960,7 +967,10 @@ Options specific to %1\$s:
             printf("mknod('%s'): could not create target\n",$path);
             return -FUSE_EFAULT;
         }
-        
+
+        if($this->use_fs_cache)
+            $this->fsc_load($path);
+                
         if($this->debug)
             printf("mknod('%s'): return 0\n",$path);
         return 0;
@@ -1310,11 +1320,18 @@ Options specific to %1\$s:
     }
 
     //load a file into the fs cache
-    function fsc_load($path) {
+    function fsc_load($path,$force=false) {
+        if(substr($path,0,1)!="/")
+            $path="/".$path;
         printf("FSC loading '%s' into cache\n",$path);
 
         if(!$this->use_fs_cache)
             return -FUSE_EIO;
+        
+        if(isset($this->fs_cache[$path]) && $force===false) {
+            printf("fsc_load('%s'): skipping GET, already have file in cache at %s\n",$path,$this->fs_cache[$path]["fs"]);
+            return $this->fs_cache[$path];
+        }
         
         //base sanity check
         $stat=$this->curl_mlst($path);
@@ -1366,32 +1383,107 @@ Options specific to %1\$s:
             return -FUSE_EIO;
         }
         
-        if(!isset($this->fs_cache["/".$path]))
-            $this->fs_cache["/".$path]=array("dirty"=>false,"stat"=>$stat,"fs"=>$cache_path);
+        $this->fs_cache["/".$path]=array("dirty"=>false,"stat"=>$stat,"fs"=>$cache_path);
+        
         return $this->fs_cache["/".$path];
     }
     
+    //read up to $length bytes from the cache behind $path starting at $offset
     public function fsc_get($path,$offset,$length) {
         if(substr($path,0,1)!="/")
             $path="/".$path;
-        if(!isset($this->fs_cache[$path]))
+        printf("%s(path='%s', offset=%d, length=%d) called\n",__FUNCTION__,$path,$offset,$length);
+        
+        //are the metadata in RAM?
+        if(!isset($this->fs_cache[$path])) {
+            printf("fsc_get('%s'): requested file without metadata in cache\n",$path);
             return -FUSE_EIO;
+        }
         $c=$this->fs_cache[$path];
+        
+        printf("fsc_get('%s'): using %s as cachefile\n",$path,$c["fs"]);
         $fp=fopen($c["fs"],"r");
-        if($fp===false)
+        if($fp===false) {
+            printf("fsc_get('%s'): fopen on %s failed\n",$path,$c["fs"]);
             return -FUSE_EIO;
+        }
         $ret=fseek($fp,$offset);
-        if($ret===false)
+        if($ret===false) {
+            printf("fsc_get('%s'): fseek on %s failed\n",$path,$c["fs"]);
             return -FUSE_EIO;
+        }
         $buf=fread($fp,$length);
-        if($buf===false)
+        if($buf===false) {
+            printf("fsc_get('%s'): fread on %s failed\n",$path,$c["fs"]);
             return -FUSE_EIO;
-        if(strlen($buf)!=$length)
+        }
+        if(strlen($buf)!=$length) {
+            printf("fsc_get('%s'): buffer length mismatch on %s\n",$path,$c["fs"]);
             return -FUSE_EIO;
+        }
         $ret=fclose($fp);
-        if($ret===false)
+        if($ret===false) {
+            printf("fsc_get('%s'): fclose on %s failed\n",$path,$c["fs"]);
             return -FUSE_EIO;
+        }
         return $buf;
+    }
+    
+    public function fsc_put($path,$offset,$buf) {
+        if(substr($path,0,1)!="/")
+            $path="/".$path;
+        //are the metadata in RAM?
+        if(!isset($this->fs_cache[$path])) {
+            printf("fsc_put('%s'): requested file without metadata in cache\n",$path);
+            return -FUSE_EIO;
+        }
+        $c=&$this->fs_cache[$path];
+        if($c["dirty"]===false) {
+            printf("fsc_put('%s'): marking as dirty\n",$path);
+            $c["dirty"]=true;
+            $fs_clean=$c["fs"];
+            $fs_dirty=$c["fs"]."-dirty";
+            $ret=copy($fs_clean,$fs_dirty);
+            if($ret===false) {
+                printf("fsc_put('%s'): can't copy %s to %s\n",$path,$fs_clean,$fs_dirty);
+                return -FUSE_EIO;
+            }
+            $c["fs"]=$fs_dirty;
+        } else {
+            printf("fsc_put('%s'): file is marked as dirty\n",$path);
+        }
+        printf("fsc_put('%s'): using %s as cachefile\n",$path,$c["fs"]);
+        
+        $fp=fopen($c["fs"],"c");
+        if($fp===false) {
+            printf("fsc_put('%s'): fopen on %s failed\n",$path,$c["fs"]);
+            return -FUSE_EIO;
+        }
+        $ret=fseek($fp,$offset);
+        if($ret===false) {
+            printf("fsc_put('%s'): fseek on %s failed\n",$path,$c["fs"]);
+            return -FUSE_EIO;
+        }
+        $ret=fwrite($fp,$buf);
+        if($ret===false) {
+            printf("fsc_put('%s'): fwrite on %s failed\n",$path,$c["fs"]);
+            return -FUSE_EIO;
+        }
+        $ret=fclose($fp);
+        if($ret===false) {
+            printf("fsc_put('%s'): fclose on %s failed\n",$path,$c["fs"]);
+            return -FUSE_EIO;
+        }
+        
+        $ns=filesize($c["fs"]);
+        if($ns===false) {
+            printf("fsc_put('%s'): filesize on %s failed\n",$path,$c["fs"]);
+            return -FUSE_EIO;
+        }
+        //update stat
+        $c["stat"]["modify"]=time();
+        $c["stat"]["size"]=$ns;
+        return 0;
     }
     
     public function fsc_is_dirty($path) {
@@ -1400,6 +1492,45 @@ Options specific to %1\$s:
         if(!isset($this->fs_cache[$path]))
             return -FUSE_EIO;
         return $this->fs_cache[$path]["dirty"];
+    }
+    
+    //do a write-back
+    public function fsc_flush($path) {
+        if(substr($path,0,1)!="/")
+            $path="/".$path;
+        if(!isset($this->fs_cache[$path]))
+            return -FUSE_EIO;
+        
+        $c=&$this->fs_cache[$path];
+        if($c["dirty"]===false) {
+            printf("fsc_flush('%s'): called on non-dirty file\n",$path);
+            return 0;
+        }
+        
+        $clen=$c["stat"]["size"];
+        $content=file_get_contents($c["fs"]);
+        if($content===false) {
+            printf("fsc_flush('%s'): file_get_contents failed\n");
+            return -FUSE_EIO;
+        }
+        $ret=$this->curl_put($path,0,$content);
+        if($ret===false) {
+            printf("fsc_flush('%s'): curl_put failed\n");
+            return -FUSE_EIO;
+        }
+        $this->cache_invalidate($path);
+        $c["dirty"]=false;
+        $ret=$this->fsc_load($path,true);
+        if($ret<0) {
+            printf("fsc_flush('%s'): fsc_load failed\n");
+            return -FUSE_EIO;
+        }
+        if($this->fs_cache[$path]["stat"]["size"]!=$clen) {
+            printf("fsc_flush('%s'): fsc_load reported size mismatch\n");
+            return -FUSE_EIO;
+        }
+        printf("fsc_flush('%s'): wrote back changes\n",$path);
+        return 0;
     }
     
     //open a file
@@ -1625,24 +1756,28 @@ Options specific to %1\$s:
             $path=$handle_data["path"];
         }
         
-        //check if we're having an offset that places us in the middle of the file
-        $stat=$this->curl_mlst($path);
-        if($stat<0)
-            return $stat;
-        if($offset<$stat["size"]) {
-            printf("write('%s',%d): requested offset %d is smaller than file size %d\n",$path,$handle,$offset,$stat["size"]);
-            
-            //backup the old data
-            $old=$this->curl_get($path,0,$stat["size"]);
-            if($old<0)
-                return $old;
-            $pre=substr($old,0,$offset);
-            $post=substr($old,$offset+strlen($buf));
-            $new=$pre.$buf.$post;
-            //do separate curl_put, as changing $buf would mess up the return strlen($buf) below!
-            $ret=$this->curl_put($path,0,$new);
+        if($this->use_fs_cache) {
+            $ret=$this->fsc_put($path,$offset,$buf);
         } else {
-            $ret=$this->curl_put($path,$offset,$buf);
+            //check if we're having an offset that places us in the middle of the file
+            $stat=$this->curl_mlst($path);
+            if($stat<0)
+                return $stat;
+            if($offset<$stat["size"]) {
+                printf("write('%s',%d): requested offset %d is smaller than file size %d\n",$path,$handle,$offset,$stat["size"]);
+                
+                //backup the old data
+                $old=$this->curl_get($path,0,$stat["size"]);
+                if($old<0)
+                    return $old;
+                $pre=substr($old,0,$offset);
+                $post=substr($old,$offset+strlen($buf));
+                $new=$pre.$buf.$post;
+                //do separate curl_put, as changing $buf would mess up the return strlen($buf) below!
+                $ret=$this->curl_put($path,0,$new);
+            } else {
+                $ret=$this->curl_put($path,$offset,$buf);
+            }
         }
         if($ret<0)
             return $ret;
@@ -1659,7 +1794,7 @@ Options specific to %1\$s:
         return -FUSE_ENOSYS;
     }
     
-    //flush is not needed, we PUT directly on write calls
+    //Just invalidate the mdata caches when fs-cache is not enabled, else do a writeback
     public function flush($path,$handle) {
         if($this->debug)
             printf("PHPFS: %s(path='%s', handle=%d) called\n", __FUNCTION__,$path,$handle);
@@ -1670,10 +1805,12 @@ Options specific to %1\$s:
             return -FUSE_EBADF;
         }
         
-        if($this->fsc_is_dirty($path)) {
-            $this->cache_invalidate(dirname($path));
+        if($this->use_fs_cache && $this->fsc_is_dirty($path)) {
+            $ret=$this->fsc_flush($path);
+            if($ret<0)
+                return $ret;
+        } else //fsc_flush also reloads the mlst cache of the file
             $this->cache_invalidate($path);
-        }
         
         if($this->debug)
             printf("flush('%s',%d): return 0\n",$path,$handle);
@@ -1692,11 +1829,15 @@ Options specific to %1\$s:
         }
         
         unset($this->handles[$handle]);
-        
-        if($this->fsc_is_dirty($path)) {
-            $this->cache_invalidate(dirname($path));
+
+        if($this->use_fs_cache && $this->fsc_is_dirty($path)) {
+            $ret=$this->fsc_flush($path);
+            if($ret<0)
+                return $ret;
+        } elseif($this->use_fs_cache && !$this->fsc_is_dirty($path)) {
+            //do nothing, file is written back already or hasn't even changed
+        } else //fsc_flush also reloads the mlst cache of the file
             $this->cache_invalidate($path);
-        }
         
         $this->fs_count[$path]--;
         if($this->debug)
