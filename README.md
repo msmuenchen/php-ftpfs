@@ -65,7 +65,7 @@ separated with the underscore symbol.
 Files ending in -dirty are files for which a handle has been opened and stuff
 has been written to it, but flush() or release haven't been called yet.
 
-!!! NEVER EVER DELETE ANYTHING IN THE CACHE DIRECTORY WHEN PHP-FTPFS IS RUNNING !!!
+*** !!! NEVER EVER DELETE ANYTHING IN THE CACHE DIRECTORY WHEN PHP-FTPFS IS RUNNING !!! ***
 
 ## Caveats
 On 32-bit systems, you WILL encounter problems with files larger than 2GB,
