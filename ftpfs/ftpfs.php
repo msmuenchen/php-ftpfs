@@ -308,7 +308,6 @@ Options specific to %1\$s:
                 break;
             case $this->opt_keys["KEY_URL"]:
                 $arg=substr($arg,8);
-                printf("got url '%s'\n",$arg);
                 //tokenize the url
                 $url=parse_url($arg);
                 if(strtolower($url["scheme"])!="ftp") {
