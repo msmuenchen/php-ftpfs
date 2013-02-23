@@ -1016,7 +1016,7 @@ Options specific to %1\$s:
         if($stat<0)
             return $stat;
         
-        if(isset($this->fs_count[$path]) && $this->fs_count[$path]>0)
+        if(isset($this->fs_count[$path]) && $this->fs_count[$path]>0) {
             printf("unlink('%s'): File busy, %d open handles\n",$path,$this->fs_count[$path]);
             return -FUSE_EBUSY;
         }
@@ -1111,7 +1111,7 @@ Options specific to %1\$s:
             return -FUSE_EEXIST;
         if($stat_to!==-FUSE_ENOENT)
             return $stat_to;
-        if(isset($this->fs_count[$path_from]) && $this->fs_count[$path_from]>0)
+        if(isset($this->fs_count[$path_from]) && $this->fs_count[$path_from]>0) {
             printf("rename('%s','%s'): File busy, %d open handles\n",$path_from,$path_to,$this->fs_count[$path_from]);
             return -FUSE_EBUSY;
         }
@@ -1167,7 +1167,7 @@ Options specific to %1\$s:
         //Nothing to do here?
         if($stat["size"]==$length)
             return 0;
-        if(isset($this->fs_count[$path]) && $this->fs_count[$path]>0)
+        if(isset($this->fs_count[$path]) && $this->fs_count[$path]>0) {
             printf("truncate('%s'): File busy, %d open handles\n",$path,$this->fs_count[$path]);
             return -FUSE_EBUSY;
         }
@@ -1259,7 +1259,7 @@ Options specific to %1\$s:
         if($stat["type"]=="dir")
             return -FUSE_EISDIR;
         
-        if(isset($this->fs_count[$path]) && $this->fs_count[$path]>0)
+        if(isset($this->fs_count[$path]) && $this->fs_count[$path]>0) {
             printf("utime('%s'): File busy, %d open handles\n",$path,$this->fs_count[$path]);
             return -FUSE_EBUSY;
         }
