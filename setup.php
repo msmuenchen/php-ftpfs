@@ -122,4 +122,14 @@ if(substr($buf[0],0,2)!="#!") {
     fwrite($fp,$line);
   fclose($fp);
 }
+
+//Write the php.ini containing the system timezone to avoid warnings on date()
+$tzd=file_get_contents("/etc/timezone");
+if($tzd===false || trim($tzd)=="" || !in_array(trim($tzd), DateTimeZone::listIdentifiers())) {
+  printf("Warning: broken timezone info on your system. Using UTC.\n");
+  $tzd="UTC";
+}
+$fp=fopen($conf["bin-dir"]."lib/php.ini","w");
+fwrite($fp,"date.timezone=$tzd\n");
+fclose($fp);
 printf("Installation done.\n");
