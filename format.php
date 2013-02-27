@@ -45,7 +45,17 @@ $fields  = array(
     "indent_char" => " ",
     "indent_style" => "K&R",
     "code" => $content,
-    "rewrite_short_tag" => "on"
+    "rewrite_short_tag" => "on",
+    "indent_case_default"=>"on",
+    "space_after_structures"=>"on",
+    "time"=>time(),
+    "spaces_around_map_operator"=>"on",
+    "spaces_around_assignment_operators"=>"on",
+    "spaces_around_bitwise_operators"=>"on",
+    "spaces_around_relational_operators"=>"on",
+    "spaces_around_equality_operators"=>"on",
+    "spaces_around_logical_operators"=>"on",
+    "spaces_around_math_operators"=>"on"
 );
 $poststr = "";
 foreach ($fields as $k => $v) {
@@ -81,10 +91,6 @@ if ($ret === false) {
     printf("Could not run cURL request: %s\n", curl_error($curl));
     exit(1);
 }
-
-//Fix broken escape of phpformatter.com API
-$ret = preg_replace("@([^\\\\])'@isU", '\\1"', $ret);
-$ret = str_replace("\\'", "'", $ret);
 
 //try to decode the response
 $response = json_decode($ret);
